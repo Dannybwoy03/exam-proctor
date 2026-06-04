@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}Page not found — Exam Proctor{% endblock %}
+{% block body %}
+{% include "errors/empty_state.html" with code="404" description="The page you're looking for might have been<br>moved or doesn't exist." home_url=home_url explore_url=explore_url explore_label=explore_label home_icon="dashboard" explore_icon="books" %}
+{% endblock %}

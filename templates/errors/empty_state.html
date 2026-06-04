@@ -1,0 +1,19 @@
+{# Reusable empty / error state — converted from the React NotFound layout. #}
+<div class="error-empty-page">
+    <div class="error-empty" role="alert">
+        <header class="error-empty-header">
+            <h1 class="error-empty-code">{{ code }}</h1>
+            <p class="error-empty-desc">{{ description|safe }}</p>
+        </header>
+        <div class="error-empty-actions">
+            <a href="{{ home_url }}" class="btn btn-primary btn-sm error-empty-btn">
+                {% include "includes/icon.html" with name=home_icon|default:"dashboard" size="sm" only %}
+                {{ home_label|default:"Go Home" }}
+            </a>
+            <a href="{{ explore_url }}" class="btn btn-outline btn-sm error-empty-btn">
+                {% include "includes/icon.html" with name=explore_icon|default:"books" size="sm" only %}
+                {{ explore_label|default:"Explore" }}
+            </a>
+        </div>
+    </div>
+</div>

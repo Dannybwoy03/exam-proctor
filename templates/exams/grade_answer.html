@@ -1,0 +1,42 @@
+{% extends "layouts/portal.html" %}
+{% load static %}
+{% block portal_content %}
+<div class="portal-page">
+    <header class="exam-page-head">
+        <div>
+            <p class="exam-page-eyebrow">Manual grading</p>
+            <h1 class="admin-page-title">Grade student answer</h1>
+            <p class="exam-page-subtitle">
+                {{ answer.attempt.exam.title }} · {{ answer.attempt.student.get_full_name|default:answer.attempt.student.username }}
+            </p>
+        </div>
+        <a class="btn btn-outline btn-sm" href="{% url 'exams:pending_reviews' answer.attempt.exam.pk %}">Back to queue</a>
+    </header>
+
+    <section class="portal-card">
+        <h2 class="portal-card-title">Question</h2>
+        <p class="grade-card-body">{{ answer.question.text }}</p>
+        <h2 class="portal-card-title" style="margin-top:1.25rem;">Student answer</h2>
+        <p class="grade-card-body grade-card-body--quoted">{{ answer.text_answer|default:"(no answer submitted)" }}</p>
+        <p class="result-meta-line"><strong>Max marks:</strong> {{ max_marks }}</p>
+    </section>
+
+    <section class="portal-card">
+        <h2 class="portal-card-title">Score this answer</h2>
+        <form method="post" class="portal-form">
+            {% csrf_token %}
+            {% for field in form %}
+                <div class="portal-form-field {% if field.errors %}auth-field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<p class="portal-form-hint">{{ field.help_text }}</p>{% endif %}
+                    {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+                </div>
+            {% endfor %}
+            <div class="portal-form-actions">
+                <button type="submit" class="btn btn-primary">Save grade</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

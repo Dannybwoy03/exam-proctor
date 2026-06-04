@@ -1,0 +1,8 @@
+<a href="{{ href }}"
+   class="{{ class|default:'btn btn-outline btn-sm' }}"
+   data-portal-tab
+   hx-get="{{ href }}"
+   hx-target="#portal-main"
+   hx-swap="innerHTML show:none settle:120ms"
+   hx-push-url="true"
+   hx-indicator="#portal-loading">{{ label }}</a>

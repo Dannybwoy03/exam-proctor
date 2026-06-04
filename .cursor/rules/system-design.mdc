@@ -1,0 +1,26 @@
+---
+description: Read the canonical system design before implementing features for the Exam Proctor project
+alwaysApply: true
+---
+
+# Exam Proctor — System Design Reference
+
+Before writing or modifying code in this project, read:
+
+- **[docs/SYSTEM_DESIGN.md](../../docs/SYSTEM_DESIGN.md)** — architecture, models, APIs, confirmed decisions
+- **[docs/PLAN.md](../../docs/PLAN.md)** — UI conventions (Flaticon icons, no emojis, monochromatic text hierarchy), portal navigation plan
+
+That document is the single source of truth for:
+
+- Architecture, data flows, and project layout
+- Database models and relationships
+- API endpoints and WebSocket channels
+- ML/proctoring background processing (Celery, YOLOv5, face match)
+- Confirmed design decisions (session auth, exam codes, strict lockdown, etc.)
+- **Question Bank Builder UI**, teacher exam workflow, and admin approval/freeze/add-time controls (§2.1–§2.2)
+- **Unified portal navigation**: single sidebar at `templates/includes/portal_sidebar.html` with `portal_nav` active key (see `.cursor/rules/confirm-todo-list.mdc`)
+- **UI iconography**: no emojis — use Flaticon icons per `docs/PLAN.md`
+- **UI typography**: monochromatic hierarchy — no colored alert text; use weight + neutral notice cards per `docs/PLAN.md`
+- Implementation phase checklist
+
+When implementing a feature, align with the confirmed decisions in section 0 of SYSTEM_DESIGN.md. Do not introduce JWT auth, open exam access, or external ID database lookups unless the design doc is updated first.

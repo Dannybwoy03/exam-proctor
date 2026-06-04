@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Awaiting Approval — Exam Proctor{% endblock %}
+{% block body %}
+<div class="auth-layout">
+    <div class="auth-card auth-card--wide">
+        <div class="auth-card-header">
+            <div class="portal-logo auth-logo">
+                {% include "includes/icon.html" with name="clock" size="md" only %}
+            </div>
+            <h1 class="auth-title">Awaiting administrator approval</h1>
+            <p class="auth-subtitle">
+                Hi {{ teacher_user.first_name|default:teacher_user.username }} — your teacher account is queued for review.
+            </p>
+        </div>
+
+        {% if profile and profile.approval_status == 'rejected' %}
+        <div class="portal-notice-card portal-notice-card--compact" role="alert">
+            {% include "includes/icon.html" with name="warning" size="sm" only %}
+            <div class="portal-notice-content">
+                <strong class="portal-notice-title">Application rejected</strong>
+                <p class="portal-notice-body">
+                    The administrator did not approve your application. Please contact the
+                    KNUST IT helpdesk or your department head to resolve the issue.
+                </p>
+            </div>
+        </div>
+        {% else %}
+        <div class="portal-notice-card portal-notice-card--compact" role="status">
+            {% include "includes/icon.html" with name="shield" size="sm" only %}
+            <div class="portal-notice-content">
+                <strong class="portal-notice-title">Application received</strong>
+                <p class="portal-notice-body">
+                    An administrator typically reviews new teacher accounts within 1–2 business days.
+                    You'll be able to sign in here as soon as your account is approved.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
+        <section class="pending-summary">
+            <h2 class="pending-summary-title">Submitted application</h2>
+            <dl class="pending-summary-grid">
+                <div><dt>Full name</dt><dd>{{ teacher_user.get_full_name|default:"—" }}</dd></div>
+                <div><dt>Username</dt><dd>{{ teacher_user.username }}</dd></div>
+                <div><dt>Email</dt><dd>{{ teacher_user.email|default:"—" }}</dd></div>
+                {% if profile %}
+                <div><dt>Staff ID</dt><dd>{{ profile.staff_id_number|default:"—" }}</dd></div>
+                <div><dt>Department</dt><dd>{{ profile.department|default:"—" }}</dd></div>
+                {% if profile.qualification %}
+                <div><dt>Qualification</dt><dd>{{ profile.qualification }}</dd></div>
+                {% endif %}
+                {% endif %}
+                <div><dt>Submitted</dt><dd>{{ teacher_user.date_joined|date:"M d, Y H:i" }}</dd></div>
+                <div><dt>Status</dt>
+                    <dd>
+                        {% if profile.approval_status == 'rejected' %}
+                        <span class="admin-status-badge pending">Rejected</span>
+                        {% else %}
+                        <span class="admin-status-badge pending">Pending review</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="pending-next-steps">
+            <h2 class="pending-summary-title">What happens next</h2>
+            <ol class="pending-steps-list">
+                <li>An administrator opens your application and verifies your staff ID details.</li>
+                <li>Once approved, you can sign in to the Faculty portal and start building question banks.</li>
+                <li>If something is wrong with your application, the administrator will reach out via your registered email.</li>
+            </ol>
+        </section>
+
+        <form method="post" action="{% url 'accounts:logout' %}" class="pending-actions">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline auth-submit">Sign out</button>
+        </form>
+
+        <p class="auth-footer auth-footer--muted">
+            Need to contact support? Email
+            <a href="mailto:exam-support@knust.edu.gh">exam-support@knust.edu.gh</a>.
+        </p>
+    </div>
+</div>
+{% endblock %}

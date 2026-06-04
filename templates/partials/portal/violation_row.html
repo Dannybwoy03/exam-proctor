@@ -1,0 +1,53 @@
+{% load static %}
+<li class="timeline-item warning violation-row violation-row--{{ v.review_status }}" id="violation-{{ v.pk }}">
+    <div class="timeline-time">{{ v.created_at|time:"H:i:s" }}</div>
+    <div class="timeline-title">
+        Violation {{ v.strike_number }}: {{ v.get_violation_type_display }}
+        {% if v.is_disputed %}<span class="disputed-badge" title="Student disputed this violation at {{ v.disputed_at|date:'M d, H:i' }}">Disputed</span>{% endif %}
+        {% if v.severity_overridden %}<span class="disputed-badge" title="Severity manually adjusted">Adjusted</span>{% endif %}
+        <span class="violation-meta">
+            severity <strong>{{ v.get_severity_display }}</strong>
+            · status <strong>{{ v.get_review_status_display }}</strong>
+            {% if v.reviewed_at %}· reviewed {{ v.reviewed_at|date:"M d, H:i" }}{% endif %}
+        </span>
+    </div>
+
+    <form class="violation-actions"
+          hx-post="{% url 'proctoring:review_violation' v.pk %}"
+          hx-target="#violation-{{ v.pk }}"
+          hx-swap="outerHTML"
+          hx-include="this">
+        {% csrf_token %}
+        <div class="violation-actions-grid">
+            <label class="violation-field">
+                <span>Status</span>
+                <select name="review_status">
+                    {% for value, label in v.ReviewStatus.choices %}
+                    <option value="{{ value }}" {% if v.review_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="violation-field">
+                <span>Severity</span>
+                <select name="severity">
+                    {% for value, label in v.Severity.choices %}
+                    <option value="{{ value }}" {% if v.severity == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+        <label class="violation-field violation-field--note">
+            <span>Message to student</span>
+            <textarea name="teacher_note" rows="2" placeholder="Optional — visible on the student's result page.">{{ v.teacher_note }}</textarea>
+        </label>
+        <div class="violation-actions-row">
+            <button type="submit" class="btn btn-primary btn-sm">Save review</button>
+            <button type="submit"
+                    class="btn btn-outline btn-sm"
+                    name="review_status" value="ignored"
+                    title="Quick action: mark this violation as Ignored and save.">
+                Ignore
+            </button>
+        </div>
+    </form>
+</li>

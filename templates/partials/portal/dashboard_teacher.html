@@ -1,0 +1,45 @@
+<div class="portal-page" data-portal-nav="dashboard" data-portal-title="Teacher Dashboard">
+<div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div class="portal-card" style="margin:0;text-align:center;">
+        <div style="font-size:0.8rem;color:var(--color-text-muted);">Total Exams</div>
+        <div style="font-size:2rem;font-weight:800;">{{ exam_count }}</div>
+    </div>
+    <div class="portal-card" style="margin:0;text-align:center;">
+        <div style="font-size:0.8rem;color:var(--color-text-muted);">Published</div>
+        <div style="font-size:2rem;font-weight:800;">{{ published_count }}</div>
+    </div>
+    <div class="portal-card" style="margin:0;text-align:center;">
+        <div style="font-size:0.8rem;color:var(--color-text-muted);">Question Banks</div>
+        <div style="font-size:2rem;font-weight:800;">{{ banks|length }}</div>
+    </div>
+</div>
+
+<div class="portal-card">
+    <div class="admin-card-header">
+        <h3 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="question-bank" size="sm" only %} Question Banks</h3>
+        <a href="{% url 'exams:question_banks' %}" class="admin-view-all" data-portal-tab>View All →</a>
+    </div>
+    {% for b in banks %}
+    <div class="faculty-list-row" style="padding:0.75rem 0;border-bottom:1px solid var(--color-border-light);">
+        <div>
+            <div class="faculty-list-title">{{ b.title }}</div>
+            <div class="faculty-list-meta">{{ b.course.code }} · {{ b.question_count }} questions</div>
+        </div>
+        <a href="{% url 'exams:question_bank_builder' b.pk %}" class="btn btn-primary btn-sm" data-portal-full>Open Builder</a>
+    </div>
+    {% empty %}
+    <p class="admin-empty">No question banks yet.</p>
+    <a href="{% url 'exams:question_bank_create' %}" class="btn btn-primary btn-sm" data-portal-full>Create Question Bank</a>
+    {% endfor %}
+</div>
+
+<div class="portal-card">
+    <h3 class="portal-card-title">Quick Actions</h3>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <a href="{% url 'exams:question_bank_create' %}" class="btn btn-primary" data-portal-full>New Question Bank</a>
+        <a href="{% url 'courses:create' %}" class="btn btn-outline" data-portal-full>Create Course</a>
+        <a href="{% url 'exams:create' %}" class="btn btn-outline" data-portal-full>Create Exam</a>
+        <a href="{% url 'flagged_sessions' %}" class="btn btn-outline" data-portal-tab>Review Flagged Sessions</a>
+    </div>
+</div>
+</div>

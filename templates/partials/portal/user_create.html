@@ -1,0 +1,46 @@
+<div class="portal-page" data-portal-nav="users" data-portal-title="{{ page_title }}">
+{% if messages %}
+<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+{% endif %}
+
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">{{ page_title }}</h1>
+        <p class="admin-page-subtitle">
+            {% if role == 'student' %}
+                Provision a student account. The account is approved immediately — no ID upload required.
+            {% elif role == 'teacher' %}
+                Provision a teacher account. The teacher will be active and able to author exams right away.
+            {% else %}
+                Create another administrator. Restricted to the super administrator.
+            {% endif %}
+        </p>
+    </div>
+    <a href="{% url 'accounts:user_list' %}" class="btn btn-outline btn-sm" data-portal-tab>← Back to All Users</a>
+</div>
+
+<section class="portal-card" style="max-width:720px;">
+    {% if form.non_field_errors %}
+    <div class="portal-notice portal-notice--warning">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <form method="post" class="portal-form" novalidate>
+        {% csrf_token %}
+        {% for field in form %}
+        <div class="portal-form-field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span aria-hidden="true">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="portal-form-hint">{{ field.help_text }}</p>{% endif %}
+            {% if field.errors %}<p class="field-error">{{ field.errors|join:" " }}</p>{% endif %}
+        </div>
+        {% endfor %}
+
+        <div class="portal-form-actions">
+            <a href="{% url 'accounts:user_list' %}" class="btn btn-outline btn-sm" data-portal-tab>Cancel</a>
+            <button type="submit" class="btn btn-primary btn-sm">Create {{ role_label }}</button>
+        </div>
+    </form>
+</section>
+</div>

@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}Server error — Exam Proctor{% endblock %}
+{% block body %}
+{% include "errors/empty_state.html" with code="500" description="Something went wrong on our end.<br>Please try again in a moment." home_url=home_url explore_url=explore_url explore_label=explore_label home_icon="dashboard" explore_icon="books" %}
+{% endblock %}

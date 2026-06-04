@@ -1,0 +1,40 @@
+{% extends "layouts/portal.html" %}
+{% load static %}
+{% block portal_content %}
+<div class="portal-page">
+    <header class="exam-page-head">
+        <div>
+            <p class="exam-page-eyebrow">Manual grading queue</p>
+            <h1 class="admin-page-title">Pending reviews — {{ exam.title }}</h1>
+            <p class="exam-page-subtitle">Short-answer responses waiting on your decision.</p>
+        </div>
+        <a class="btn btn-outline btn-sm" href="{% url 'exams:detail' exam.pk %}">Back to exam</a>
+    </header>
+
+    <section class="portal-card">
+        <h2 class="portal-card-title portal-card-title--icon">
+            {% include "includes/icon.html" with name="clipboard" size="sm" only %}
+            Awaiting review
+        </h2>
+        {% if answers %}
+            <ul class="review-list">
+                {% for a in answers %}
+                    <li class="review-list-item">
+                        <div>
+                            <p class="review-list-student">{{ a.attempt.student.get_full_name|default:a.attempt.student.username }}</p>
+                            <p class="review-list-question">{{ a.question.text|truncatewords:25 }}</p>
+                            <p class="review-list-answer">
+                                <span class="review-list-answer-label">Student answer:</span>
+                                {{ a.text_answer|default:"(no text provided)" }}
+                            </p>
+                        </div>
+                        <a class="btn btn-primary btn-sm" href="{% url 'exams:grade_answer' a.pk %}">Grade</a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="result-meta-line">Nothing to review — every submission for this exam has been graded.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,143 @@
+<div class="portal-page" data-portal-nav="dashboard" data-portal-title="Admin Dashboard">
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">Admin Dashboard</h1>
+        <p class="admin-page-subtitle">System-wide overview — {{ semester_label }} Semester</p>
+    </div>
+    <div class="admin-page-actions">
+        <button type="button" class="btn btn-outline btn-sm">Export Report</button>
+        <a href="/admin/" class="btn btn-primary btn-sm" data-portal-full>System Settings</a>
+    </div>
+</div>
+
+<div class="admin-stat-grid">
+    <div class="admin-stat-card">
+        <div class="admin-stat-icon">{% include "includes/icon.html" with name="users" size="lg" only %}</div>
+        <div class="admin-stat-value">{{ total_users|default:"0" }}</div>
+        <div class="admin-stat-label">Total Users</div>
+        <div class="admin-stat-delta admin-stat-delta-up">+{{ users_this_week }} this week</div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="admin-stat-icon">{% include "includes/icon.html" with name="clipboard" size="lg" only %}</div>
+        <div class="admin-stat-value">{{ active_exams|default:"0" }}</div>
+        <div class="admin-stat-label">Active Exams</div>
+        <div class="admin-stat-meta">Across {{ dept_count }} dept{{ dept_count|pluralize }}</div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="admin-stat-icon">{% include "includes/icon.html" with name="clock" size="lg" only %}</div>
+        <div class="admin-stat-value">{{ pending_teachers|default:"0" }}</div>
+        <div class="admin-stat-label">Teacher Approvals</div>
+        <div class="admin-stat-meta portal-meta-strong"><a href="{% url 'accounts:pending_teachers' %}" data-portal-tab style="color:inherit;">Review teachers →</a></div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="admin-stat-icon">{% include "includes/icon.html" with name="document" size="lg" only %}</div>
+        <div class="admin-stat-value">{{ pending_exams|default:"0" }}</div>
+        <div class="admin-stat-label">Exam Approvals</div>
+        <div class="admin-stat-meta portal-meta-strong"><a href="{% url 'exams:admin_pending_exams' %}" data-portal-tab style="color:inherit;">Review submissions →</a></div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="admin-stat-icon">{% include "includes/icon.html" with name="id-card" size="lg" only %}</div>
+        <div class="admin-stat-value">{{ pending_student_ids|default:"0" }}</div>
+        <div class="admin-stat-label">Student ID Reviews</div>
+        <div class="admin-stat-meta portal-meta-strong"><a href="{% url 'accounts:pending_student_ids' %}" data-portal-tab style="color:inherit;">Review IDs →</a></div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="admin-stat-icon">{% include "includes/icon.html" with name="clipboard" size="lg" only %}</div>
+        <div class="admin-stat-value">{{ active_exams|default:"0" }}</div>
+        <div class="admin-stat-label">Active Exams</div>
+        <div class="admin-stat-meta"><strong>Live exam windows</strong></div>
+    </div>
+</div>
+
+<div class="admin-content-grid">
+    <div class="admin-left-column">
+    <section class="portal-card admin-card-teachers">
+        <div class="admin-card-header">
+            <h2 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="users" size="sm" only %} Pending Teacher Registrations</h2>
+            <a href="{% url 'accounts:pending_teachers' %}" class="admin-view-all" data-portal-tab>View All →</a>
+        </div>
+        {% for row in teacher_rows %}
+        <div class="admin-teacher-row">
+            <div class="admin-teacher-avatar">{{ row.user.first_name|slice:":1"|default:row.user.username|slice:":1"|upper }}</div>
+            <div class="admin-teacher-info">
+                <div class="admin-teacher-name">{{ row.user.get_full_name|default:row.user.username }}</div>
+                <div class="admin-teacher-meta">{{ row.profile.department|default:"—" }} · Staff ID: {{ row.staff_id }}</div>
+                <div class="admin-teacher-date">Applied: {{ row.applied_at|date:"M d, Y" }}</div>
+            </div>
+            <div class="admin-teacher-actions">
+                {% include "includes/portal_tab_link.html" with href=row.review_url label="View Profile" class="btn btn-outline btn-xs" only %}
+                <form method="post" action="{% url 'accounts:approve_teacher' row.profile.pk %}" class="admin-inline-form">
+                    {% csrf_token %}
+                    <button type="submit" name="action" value="reject" class="btn btn-danger-outline btn-xs">Reject</button>
+                    <button type="submit" name="action" value="approve" class="btn btn-primary btn-xs">Approve</button>
+                </form>
+                <span class="admin-status-badge pending">Pending</span>
+            </div>
+        </div>
+        {% empty %}
+        <p class="admin-empty">No pending teacher registrations.</p>
+        {% endfor %}
+    </section>
+
+    <section class="portal-card admin-card-teachers">
+        <div class="admin-card-header">
+            <h2 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="users" size="sm" only %} Active Teacher Accounts</h2>
+            <a href="{% url 'accounts:active_teachers' %}" class="admin-view-all" data-portal-tab>View All →</a>
+        </div>
+        {% for row in active_teacher_rows %}
+        <div class="admin-teacher-row">
+            <div class="admin-teacher-avatar">{{ row.user.first_name|slice:":1"|default:row.user.username|slice:":1"|upper }}</div>
+            <div class="admin-teacher-info">
+                <div class="admin-teacher-name">{{ row.user.get_full_name|default:row.user.username }}</div>
+                <div class="admin-teacher-meta">{{ row.profile.department|default:"—" }} · Staff ID: {{ row.staff_id }}</div>
+                <div class="admin-teacher-date">Approved: {{ row.approved_at|date:"M d, Y" }}</div>
+            </div>
+            <div class="admin-teacher-actions">
+                {% include "includes/portal_tab_link.html" with href=row.review_url label="View Profile" class="btn btn-outline btn-xs" only %}
+                {% if row.is_active %}
+                <span class="admin-status-badge active">Active</span>
+                {% else %}
+                <span class="admin-status-badge pending">Access Revoked</span>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <p class="admin-empty">No approved teachers yet.</p>
+        {% endfor %}
+    </section>
+    </div>
+
+    <div class="admin-right-column">
+        <section class="portal-card">
+            <div class="admin-card-header">
+                <h2 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="clipboard" size="sm" only %} Exam Status — All Courses</h2>
+                <a href="{% url 'exams:list' %}" class="admin-view-all" data-portal-tab>View All →</a>
+            </div>
+            {% if live_exams %}
+            <div class="admin-exam-section-label live">LIVE NOW</div>
+            {% for item in live_exams %}
+            <div class="admin-exam-row">
+                <div>
+                    <div class="admin-exam-title">{{ item.exam.course.code }}: {{ item.exam.title }}</div>
+                    <div class="admin-exam-meta">{{ item.teacher_name }}</div>
+                </div>
+                <div class="admin-exam-actions">
+                    <a href="{% url 'exams:detail' item.exam.pk %}" class="btn btn-outline btn-xs" data-portal-full>Monitor</a>
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% if not live_exams and not pending_exam_rows and not completed_exams %}
+            <p class="admin-empty">No published exams yet.</p>
+            {% endif %}
+        </section>
+
+    </div>
+</div>
+</div>

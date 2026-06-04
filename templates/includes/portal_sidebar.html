@@ -1,0 +1,136 @@
+<aside class="portal-sidebar">
+    <nav class="portal-nav">
+        <a href="{% url 'accounts:dashboard' %}"
+           data-portal-nav="dashboard"
+           class="portal-nav-link {% if portal_nav == 'dashboard' %}active{% endif %}"
+           hx-get="{% url 'accounts:dashboard' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="dashboard" size="sm" only %}<span>Dashboard</span></span>
+        </a>
+
+        {% if user.is_admin_user %}
+        <a href="{% url 'accounts:pending_teachers' %}"
+           data-portal-nav="teachers"
+           class="portal-nav-link {% if portal_nav == 'teachers' %}active{% endif %}"
+           hx-get="{% url 'accounts:pending_teachers' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="users" size="sm" only %}<span>Teacher Approvals</span></span>
+            {% if pending_teachers %}<span class="nav-badge nav-badge-warn">{{ pending_teachers }}</span>{% endif %}
+        </a>
+        <a href="{% url 'accounts:active_teachers' %}"
+           data-portal-nav="active_teachers"
+           class="portal-nav-link {% if portal_nav == 'active_teachers' %}active{% endif %}"
+           hx-get="{% url 'accounts:active_teachers' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="users" size="sm" only %}<span>Active Teachers</span></span>
+        </a>
+        <a href="{% url 'exams:admin_pending_exams' %}"
+           data-portal-nav="exam_approvals"
+           class="portal-nav-link {% if portal_nav == 'exam_approvals' %}active{% endif %}"
+           hx-get="{% url 'exams:admin_pending_exams' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="document" size="sm" only %}<span>Exam Approvals</span></span>
+            {% if pending_exams %}<span class="nav-badge nav-badge-warn">{{ pending_exams }}</span>{% endif %}
+        </a>
+        <a href="{% url 'accounts:pending_student_ids' %}"
+           data-portal-nav="student_ids"
+           class="portal-nav-link {% if portal_nav == 'student_ids' %}active{% endif %}"
+           hx-get="{% url 'accounts:pending_student_ids' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="id-card" size="sm" only %}<span>Student ID Reviews</span></span>
+            {% if pending_student_ids %}<span class="nav-badge nav-badge-warn">{{ pending_student_ids }}</span>{% endif %}
+        </a>
+        <a href="{% url 'accounts:user_list' %}"
+           data-portal-nav="users"
+           class="portal-nav-link {% if portal_nav == 'users' %}active{% endif %}"
+           hx-get="{% url 'accounts:user_list' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="user" size="sm" only %}<span>All Users</span></span>
+        </a>
+        {% endif %}
+
+        <a href="{% url 'courses:list' %}"
+           data-portal-nav="courses"
+           class="portal-nav-link {% if portal_nav == 'courses' %}active{% endif %}"
+           hx-get="{% url 'courses:list' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="books" size="sm" only %}<span>{% if user.is_admin_user %}All Courses{% else %}Courses{% endif %}</span></span>
+        </a>
+        <a href="{% url 'exams:question_banks' %}"
+           data-portal-nav="banks"
+           class="portal-nav-link {% if portal_nav == 'banks' %}active{% endif %}"
+           hx-get="{% url 'exams:question_banks' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="question-bank" size="sm" only %}<span>Question Banks</span></span>
+        </a>
+        <a href="{% url 'exams:list' %}"
+           data-portal-nav="exams"
+           class="portal-nav-link {% if portal_nav == 'exams' %}active{% endif %}"
+           hx-get="{% url 'exams:list' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="clipboard" size="sm" only %}<span>{% if user.is_admin_user %}All Exams{% else %}Exams{% endif %}</span></span>
+            {% if user.is_admin_user and published_exams %}<span class="nav-badge nav-badge-ok">{{ published_exams }}</span>{% endif %}
+        </a>
+        {% if user.is_teacher_user %}
+        <a href="{% url 'flagged_sessions' %}"
+           data-portal-nav="flagged"
+           class="portal-nav-link {% if portal_nav == 'flagged' %}active{% endif %}"
+           hx-get="{% url 'flagged_sessions' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="flag" size="sm" only %}<span>Flagged Sessions</span></span>
+            {% if flagged_sessions %}<span class="nav-badge">{{ flagged_sessions }}</span>{% endif %}
+        </a>
+        {% endif %}
+    </nav>
+
+    {% if user.is_admin_user %}
+    <div class="portal-server-status">
+        <div class="portal-server-title">Server Status</div>
+        <div class="portal-server-row">
+            <span><span class="status-dot status-dot-sm"></span> API Server</span>
+            <span class="portal-server-ok">Online</span>
+        </div>
+        <div class="portal-server-row">
+            <span><span class="status-dot status-dot-sm"></span> CV Engine</span>
+            <span class="portal-server-ok">Online</span>
+        </div>
+        <div class="portal-server-row">
+            <span>Storage</span>
+            <span class="portal-server-warn">{{ storage_used_pct }}% Used</span>
+        </div>
+        <div class="portal-storage-bar">
+            <div class="portal-storage-fill" style="width: {{ storage_used_pct }}%;"></div>
+        </div>
+    </div>
+    {% endif %}
+</aside>

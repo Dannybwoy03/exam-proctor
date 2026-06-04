@@ -1,0 +1,37 @@
+:root {
+    /* Figma-inspired palette (Group 9 AI Exam Proctor) */
+    --color-primary: #0d4f3c;
+    --color-primary-dark: #064e3b;
+    --color-primary-light: #e8f5ef;
+    --color-header: #0a3d2e;
+
+    --color-accent-orange: #ea580c;
+    --color-accent-orange-bg: #fff7ed;
+    --color-accent-yellow: #fbbf24;
+    --color-accent-yellow-bg: #fef3c7;
+
+    --color-success: #16a34a;
+    --color-success-bg: #ecfdf5;
+    --color-success-text: #15803d;
+
+    --color-danger: #dc2626;
+    --color-danger-bg: #fef2f2;
+    --color-risk-high: #e11d48;
+    --color-risk-med: #f97316;
+
+    --color-bg: #f3f4f6;
+    --color-surface: #ffffff;
+    --color-text: #111827;
+    --color-text-muted: #6b7280;
+    --color-border: #e5e7eb;
+    --color-border-light: #f3f4f6;
+
+    --font-family: "Inter", system-ui, -apple-system, sans-serif;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 18px;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.1);
+}

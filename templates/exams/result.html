@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Result — {{ attempt.exam.title }}{% endblock %}
+{% block body %}
+{% include "includes/portal_header_student.html" %}
+<div class="portal-page">
+    <div style="max-width:900px;margin:0 auto;">
+
+        <div class="portal-card">
+            <p class="exam-page-eyebrow">Exam result</p>
+            <h1 class="admin-page-title" style="font-size:1.4rem;">{{ attempt.exam.title }}</h1>
+            <p style="color:var(--color-text-muted);font-size:0.875rem;margin:0.25rem 0 0;">
+                Attempt #{{ attempt.attempt_number }} · {{ attempt.get_status_display }}
+            </p>
+
+            {% if attempt.is_invalidated %}
+            <div class="invalidation-banner" style="margin-top:1rem;">
+                <strong>This attempt was invalidated by your instructor.</strong>
+                Your score has been set to 0.
+                {% if attempt.invalidation_reason %}
+                <span class="invalidation-banner-reason">Reason: {{ attempt.invalidation_reason }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if show_score and result %}
+                <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--color-border);">
+                    <p class="result-score-line">
+                        <strong>{{ result.total_score }}</strong> / {{ result.max_score }}
+                        <span class="result-score-percent">· {{ attempt.percentage|floatformat:1 }}%</span>
+                    </p>
+                    {% if attempt.passed is not None %}
+                        <p class="result-meta-line" style="margin-top:0.5rem;">
+                            <strong>Outcome:</strong>
+                            {% if attempt.passed %}Passed{% else %}Did not pass{% endif %}
+                        </p>
+                    {% else %}
+                        <p class="result-meta-line" style="margin-top:0.5rem;">
+                            <strong>Outcome:</strong> Pending manual review of short answers.
+                        </p>
+                    {% endif %}
+                    <p class="result-meta-line">
+                        <strong>Submitted:</strong>
+                        {% if attempt.ended_at %}{{ attempt.ended_at|date:"M j, Y · H:i" }}{% else %}—{% endif %}
+                    </p>
+                </div>
+            {% elif not show_score %}
+                <div class="portal-notice-card" style="margin-top:1.25rem;">
+                    <div class="portal-notice-content">
+                        <strong class="portal-notice-title">Submission received</strong>
+                        <p class="portal-notice-body">
+                            Your instructor has chosen to release results after grading is complete.
+                            Check back here once results are published.
+                        </p>
+                    </div>
+                </div>
+            {% else %}
+                <div class="portal-notice-card" style="margin-top:1.25rem;">
+                    <div class="portal-notice-content">
+                        <strong class="portal-notice-title">Grading in progress</strong>
+                        <p class="portal-notice-body">Refresh this page in a moment.</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        {% if proctoring_notes %}
+        <div class="portal-card">
+            <h2 class="portal-card-title">Proctoring review · instructor notes</h2>
+            <ul class="result-answers">
+                {% for note in proctoring_notes %}
+                <li class="result-answer">
+                    <p class="result-answer-q">Violation {{ note.strike_number }}: {{ note.violation_type|cut:"_"|title }}</p>
+                    <p class="result-answer-meta">
+                        Status: <strong>{{ note.review_status|cut:"_"|title }}</strong>
+                        {% if note.reviewed_at %}· reviewed {{ note.reviewed_at|date:"M j, H:i" }}{% endif %}
+                    </p>
+                    <p style="margin:0.35rem 0 0;font-size:0.92rem;line-height:1.5;">{{ note.teacher_note }}</p>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if show_score and answers %}
+        <div class="portal-card">
+            <h2 class="portal-card-title">Question breakdown</h2>
+            <ol class="result-answers">
+                {% for answer in answers %}
+                <li class="result-answer">
+                    <p class="result-answer-q">{{ answer.question.text }}</p>
+                    <p class="result-answer-meta">
+                        Marks: {{ answer.marks_obtained|default:"—" }} / {{ answer.question.marks }}
+                        {% if answer.review_status %}· {{ answer.get_review_status_display }}{% endif %}
+                    </p>
+                </li>
+                {% endfor %}
+            </ol>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "layouts/portal.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block portal_content %}
+<div class="portal-page" data-portal-nav="exams" data-portal-title="{{ title }}">
+    <div class="faculty-page-header">
+        <div>
+            <h2 class="faculty-page-title">{{ title }}</h2>
+        </div>
+        <a href="{% url 'exams:list' %}" class="btn btn-outline btn-sm" data-portal-tab>← Exams</a>
+    </div>
+    <div class="portal-card">
+        <form method="post">
+            {% csrf_token %}
+            {% for field in form %}
+                {% if field.name == 'strictness_level' %}
+                    <fieldset class="strictness-fieldset">
+                        <legend>{{ field.label }}</legend>
+                        {% if field.help_text %}<p class="strictness-help">{{ field.help_text }}</p>{% endif %}
+                        <div class="strictness-options">
+                            {% for choice in field %}
+                            <label class="strictness-option">
+                                {{ choice.tag }}
+                                <span class="strictness-option-label">{{ choice.choice_label }}</span>
+                                <span class="strictness-option-hint">
+                                    {% if choice.data.value == 'none' %}No tab/focus/fullscreen checks. No webcam. Practice or open-book exams.
+                                    {% elif choice.data.value == 'level_1' %}Webcam + lockdown active. Students get warnings and the exam ends on the 3rd violation.
+                                    {% else %}Webcam + lockdown active. Any single violation ends the exam.
+                                    {% endif %}
+                                </span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        {{ field.errors }}
+                    </fieldset>
+                {% else %}
+                    <p>
+                        {{ field.label_tag }}
+                        {{ field }}
+                        {% if field.help_text %}<small class="form-help">{{ field.help_text }}</small>{% endif %}
+                        {{ field.errors }}
+                    </p>
+                {% endif %}
+            {% endfor %}
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

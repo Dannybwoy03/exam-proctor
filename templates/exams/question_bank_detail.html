@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ bank.title }}{% endblock %}
+{% block body %}
+{% include "includes/portal_header.html" with portal_breadcrumb="QUESTION BANK" %}
+<div class="portal-layout">
+    {% include "includes/portal_sidebar.html" %}
+    <main class="portal-main">
+        <div class="faculty-page-header">
+            <div>
+                <h2 class="faculty-page-title">{{ bank.title }}</h2>
+                <p class="faculty-page-sub">{{ bank.course.code }} · {{ bank.course.title }} · {{ questions|length }} question{{ questions|length|pluralize }}</p>
+            </div>
+            <div class="faculty-list-actions">
+                <a href="{% url 'exams:question_bank_import' bank.pk %}" class="btn btn-outline btn-sm">Import CSV</a>
+                <a href="{% url 'exams:question_add' bank.pk %}" class="btn btn-primary btn-sm">+ Add Question</a>
+            </div>
+        </div>
+
+        {% if messages %}
+        <ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+        {% endif %}
+
+        <div class="portal-card">
+            {% for q in questions %}
+            <div class="question-bank-row">
+                <div class="question-type-badge">{{ q.get_question_type_display }}</div>
+                <div class="question-bank-body">
+                    <div class="question-bank-text">{{ q.text }}</div>
+                    <div class="question-bank-meta">{{ q.marks }} mark{{ q.marks|pluralize }}</div>
+                </div>
+                <div class="faculty-list-actions">
+                    <a href="{% url 'exams:question_edit' bank.pk q.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                    <form method="post" action="{% url 'exams:question_delete' bank.pk q.pk %}" class="admin-inline-form" onsubmit="return confirm('Delete this question?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger-outline btn-xs">Delete</button>
+                    </form>
+                </div>
+            </div>
+            {% empty %}
+            <p class="admin-empty">No questions in this bank yet. Add manually or import a CSV file.</p>
+            {% endfor %}
+        </div>
+    </main>
+</div>
+{% endblock %}

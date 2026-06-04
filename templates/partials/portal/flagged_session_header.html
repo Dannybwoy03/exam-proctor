@@ -1,0 +1,21 @@
+{% load static %}
+<div class="flagged-header-card" id="flagged-header-{{ attempt.pk }}">
+    <div>
+        <span class="flag-audit-badge">{% include "includes/icon.html" with name="flag" size="sm" only %} AI SYSTEM FLAG UNDER AUDIT</span>
+        <h2 style="margin:0 0 0.25rem;font-size:1.35rem;">{{ attempt.student.get_full_name|default:attempt.student.username }}</h2>
+        <p style="margin:0;color:var(--color-text-muted);font-size:0.875rem;">
+            Course: {{ attempt.exam.course.title }} · Exam Date: {{ attempt.started_at|date:"M d, Y H:i" }}
+        </p>
+        {% if attempt.is_invalidated %}
+        <div class="invalidation-banner">
+            <strong>Attempt invalidated</strong> by {{ attempt.invalidated_by.get_full_name|default:attempt.invalidated_by.username }}
+            on {{ attempt.invalidated_at|date:"M d, Y H:i" }}.
+            <span class="invalidation-banner-reason">{{ attempt.invalidation_reason }}</span>
+        </div>
+        {% endif %}
+    </div>
+    <div class="integrity-score">
+        <div class="score">{{ selected_integrity|default:'—' }}%</div>
+        <div class="label">Integrity Index Score</div>
+    </div>
+</div>

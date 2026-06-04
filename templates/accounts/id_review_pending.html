@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}ID Verification Pending — Exam Proctor{% endblock %}
+{% block body %}
+<div class="auth-layout">
+    <div class="auth-card auth-card--wide">
+        <div class="auth-card-header">
+            <div class="portal-logo auth-logo">
+                {% include "includes/icon.html" with name="id-card" size="md" only %}
+            </div>
+            <h1 class="auth-title">
+                {% if profile.id_review_status == 'rejected' %}ID verification rejected{% else %}ID verification pending{% endif %}
+            </h1>
+            <p class="auth-subtitle">
+                Hi {{ student_user.first_name|default:student_user.username }} — we couldn't automatically verify your KNUST student ID.
+            </p>
+        </div>
+
+        {% if profile.id_review_status == 'rejected' %}
+        <div class="portal-notice-card portal-notice-card--compact" role="alert">
+            {% include "includes/icon.html" with name="warning" size="sm" only %}
+            <div class="portal-notice-content">
+                <strong class="portal-notice-title">Verification rejected</strong>
+                <p class="portal-notice-body">
+                    {% if profile.id_review_notes %}{{ profile.id_review_notes }}{% else %}The administrator could not confirm your KNUST student ID. Please contact the IT helpdesk to resolve this.{% endif %}
+                </p>
+            </div>
+        </div>
+        {% else %}
+        <div class="portal-notice-card portal-notice-card--compact" role="status">
+            {% include "includes/icon.html" with name="shield" size="sm" only %}
+            <div class="portal-notice-content">
+                <strong class="portal-notice-title">Awaiting administrator review</strong>
+                <p class="portal-notice-body">
+                    An administrator will manually verify your uploaded ID. You'll be able to take exams as soon as your account is approved (usually within 1–2 business days).
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if ocr_errors %}
+        <section class="pending-summary">
+            <h2 class="pending-summary-title">What our automatic check flagged</h2>
+            <ul class="pending-steps-list">
+                {% for err in ocr_errors %}<li>{{ err }}</li>{% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+
+        <section class="pending-summary">
+            <h2 class="pending-summary-title">Your submitted details</h2>
+            <dl class="pending-summary-grid">
+                <div><dt>Full name</dt><dd>{{ student_user.get_full_name|default:"—" }}</dd></div>
+                <div><dt>Username</dt><dd>{{ student_user.username }}</dd></div>
+                <div><dt>Email</dt><dd>{{ student_user.email|default:"—" }}</dd></div>
+                {% if profile %}
+                <div><dt>Index number</dt><dd>{{ profile.student_id_number }}</dd></div>
+                <div><dt>Programme</dt><dd>{{ profile.programme|default:"—" }}</dd></div>
+                {% endif %}
+                <div><dt>Submitted</dt><dd>{{ student_user.date_joined|date:"M d, Y H:i" }}</dd></div>
+                <div><dt>Status</dt>
+                    <dd>
+                        {% if profile.id_review_status == 'rejected' %}
+                        <span class="admin-status-badge pending">Rejected</span>
+                        {% else %}
+                        <span class="admin-status-badge pending">Pending review</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </section>
+
+        <form method="post" action="{% url 'accounts:logout' %}" class="pending-actions">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline auth-submit">Sign out</button>
+        </form>
+
+        <p class="auth-footer auth-footer--muted">
+            Need help? Email
+            <a href="mailto:exam-support@knust.edu.gh">exam-support@knust.edu.gh</a>.
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="app-shell">
+    <aside class="sidebar">
+        <a href="{% url 'accounts:dashboard' %}" class="sidebar-brand">Exam Proctor</a>
+        <nav class="sidebar-nav">
+            {% block sidebar_nav %}{% endblock %}
+        </nav>
+        <div class="sidebar-footer">
+            <div class="sidebar-user">{{ user.get_full_name|default:user.username }}</div>
+            <form method="post" action="{% url 'accounts:logout' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-link" style="color: rgba(255,255,255,0.7);">Logout</button>
+            </form>
+        </div>
+    </aside>
+    <div class="app-main">
+        <header class="topbar">
+            <h1 class="topbar-title">{% block page_title %}Dashboard{% endblock %}</h1>
+            {% block topbar_actions %}{% endblock %}
+        </header>
+        <div class="page-content">
+            {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                <li class="{{ message.tags }}">{{ message }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% block page_content %}{% endblock %}
+        </div>
+    </div>
+</div>
+{% endblock %}

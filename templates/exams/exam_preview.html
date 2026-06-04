@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Preview — {{ exam.title }}{% endblock %}
+{% block body %}
+{% include "includes/portal_header.html" with portal_breadcrumb="EXAM PREVIEW" %}
+<div class="portal-layout">
+    {% include "includes/portal_sidebar.html" %}
+    <main class="portal-main">
+        <div class="faculty-page-header">
+            <div>
+                <h2 class="faculty-page-title">Exam Preview (Teacher)</h2>
+                <p class="faculty-page-sub">{{ exam.title }} · Correct answers shown for review only</p>
+            </div>
+            <a href="{% url 'exams:exam_questions' exam.pk %}" class="btn btn-outline btn-sm">← Edit Questions</a>
+        </div>
+
+        {% for eq in exam_questions %}
+        <div class="portal-card exam-preview-card">
+            <div class="exam-preview-header">
+                <span class="question-type-badge">{{ eq.question.get_question_type_display }}</span>
+                <span class="score-value">Q{{ forloop.counter }} · {{ eq.marks_override|default:eq.question.marks }} pts</span>
+            </div>
+            <div class="exam-q-text">{{ eq.question.text }}</div>
+
+            {% if eq.question.question_type == 'mcq' %}
+            <ul class="preview-options">
+                {% for opt in eq.question.options %}
+                <li class="{% if opt.key == eq.question.correct_answer.value %}preview-correct{% endif %}">
+                    <strong>{{ opt.key }}.</strong> {{ opt.label }}
+                    {% if opt.key == eq.question.correct_answer.value %}<span class="preview-answer-tag">{% include "includes/icon.html" with name="check" size="sm" only %} Correct</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% elif eq.question.question_type == 'true_false' %}
+            <ul class="preview-options">
+                <li class="{% if eq.question.correct_answer.value == 'true' %}preview-correct{% endif %}">True {% if eq.question.correct_answer.value == 'true' %}<span class="preview-answer-tag">{% include "includes/icon.html" with name="check" size="sm" only %}</span>{% endif %}</li>
+                <li class="{% if eq.question.correct_answer.value == 'false' %}preview-correct{% endif %}">False {% if eq.question.correct_answer.value == 'false' %}<span class="preview-answer-tag">{% include "includes/icon.html" with name="check" size="sm" only %}</span>{% endif %}</li>
+            </ul>
+            {% else %}
+            <div class="preview-reference">
+                <strong>Reference answer:</strong> {{ eq.question.correct_answer.reference }}
+                <div class="preview-note">Short answers require manual grading after submission.</div>
+            </div>
+            {% endif %}
+
+            {% if eq.question.explanation %}
+            <div class="preview-explanation"><strong>Explanation:</strong> {{ eq.question.explanation }}</div>
+            {% endif %}
+        </div>
+        {% empty %}
+        <div class="portal-card"><p class="admin-empty">No questions in this exam yet.</p></div>
+        {% endfor %}
+    </main>
+</div>
+{% endblock %}

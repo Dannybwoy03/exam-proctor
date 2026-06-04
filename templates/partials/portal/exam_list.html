@@ -1,0 +1,26 @@
+<div class="portal-page" data-portal-nav="exams" data-portal-title="Exams">
+<div class="faculty-page-header">
+    <div>
+        <h2 class="faculty-page-title">{% if user.is_admin_user %}All Exams{% else %}Exams{% endif %}</h2>
+        <p class="faculty-page-sub">Create exams, attach questions from banks, then publish and share access codes.</p>
+    </div>
+    <a href="{% url 'exams:create' %}" class="btn btn-primary btn-sm" data-portal-full>+ Create Exam</a>
+</div>
+
+{% for e in exams %}
+<div class="portal-card faculty-list-card">
+    <div class="faculty-list-row">
+        <div>
+            <div class="faculty-list-title">{{ e.title }}</div>
+            <div class="faculty-list-meta">{{ e.course.code }} · {% if e.is_published %}Published{% else %}Draft{% endif %} · {{ e.duration_minutes }} min · {{ e.exam_questions.count }} Q</div>
+        </div>
+        <div class="faculty-list-actions">
+            <a href="{% url 'exams:exam_questions' e.pk %}" class="btn btn-outline btn-sm" data-portal-full>Questions</a>
+            <a href="{% url 'exams:detail' e.pk %}" class="btn btn-primary btn-sm" data-portal-full>Manage</a>
+        </div>
+    </div>
+</div>
+{% empty %}
+<div class="portal-card"><p class="admin-empty">No exams yet.</p></div>
+{% endfor %}
+</div>

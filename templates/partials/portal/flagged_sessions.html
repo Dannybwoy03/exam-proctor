@@ -1,0 +1,100 @@
+<div class="portal-page" data-portal-nav="flagged" data-portal-title="Flagged Sessions">
+<div class="portal-audit-layout">
+    <aside class="portal-audit-panel portal-audit-panel--cards" id="audit-list">
+        <div class="faculty-sidebar-section">Audit List</div>
+        <div class="flagged-session-card-list">
+        {% for item in flagged_list %}
+        {% include "partials/portal/flagged_session_card.html" with item=item selected_session=selected_session only %}
+        {% empty %}
+        <p class="flagged-session-empty">No flagged sessions.</p>
+        {% endfor %}
+        </div>
+    </aside>
+
+    <div class="portal-audit-main" id="audit-detail" data-selected-pk="{{ selected_session.pk|default:'' }}">
+        {% if selected_session %}
+        {% with s=selected_session %}
+        {% with attempt=s.attempt %}
+        {% include "partials/portal/flagged_session_header.html" with attempt=attempt session=s selected_integrity=selected_integrity %}
+
+        <div class="audit-toolbar">
+            <button type="button"
+                    class="btn btn-outline btn-sm"
+                    onclick="document.getElementById('invalidate-dialog-{{ attempt.pk }}').showModal()"
+                    {% if attempt.is_invalidated %}disabled title="Already invalidated"{% endif %}>
+                {% if attempt.is_invalidated %}Attempt Invalidated{% else %}Disqualify / Nullify Attempt{% endif %}
+            </button>
+        </div>
+
+        <dialog id="invalidate-dialog-{{ attempt.pk }}" class="portal-modal strike-warning-dialog">
+            <form method="post"
+                  class="strike-warning-card"
+                  hx-post="{% url 'proctoring:invalidate_attempt' attempt.pk %}"
+                  hx-target="#flagged-header-{{ attempt.pk }}"
+                  hx-swap="outerHTML"
+                  hx-on::after-request="document.getElementById('invalidate-dialog-{{ attempt.pk }}').close()">
+                {% csrf_token %}
+                <div class="strike-warning-header">
+                    <span class="strike-warning-icon" aria-hidden="true">{% include "includes/icon.html" with name="warning" size="md" only %}</span>
+                    <h2 class="strike-warning-title">Disqualify / nullify this attempt?</h2>
+                </div>
+                <p class="strike-warning-body">
+                    The student will see this attempt as <strong>invalidated with a score of 0</strong> on their result page.
+                    This action is reversible only by clearing the invalidation flag in admin.
+                </p>
+                <label class="violation-field violation-field--note">
+                    <span>Reason (shown to the student)</span>
+                    <textarea name="reason" rows="3" required placeholder="e.g. Confirmed unauthorized device usage during the attempt."></textarea>
+                </label>
+                <div class="strike-warning-actions">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="this.closest('dialog').close()">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Confirm Invalidation</button>
+                </div>
+            </form>
+        </dialog>
+
+        <div class="flagged-grid">
+            <div>
+                <div class="portal-card">
+                    <h3 class="portal-card-title">Automated AI Proctoring Timeline</h3>
+                    <ul class="timeline">
+                        <li class="timeline-item success">
+                            <div class="timeline-time">{{ attempt.started_at|time:"H:i:s" }}</div>
+                            <div class="timeline-title">Exam Session Authorized</div>
+                        </li>
+                        {% for v in timeline %}
+                        {% include "partials/portal/violation_row.html" with v=v %}
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="portal-card">
+                    <h3 class="portal-card-title">Live Machine-Readable Logs</h3>
+                    <div class="log-terminal">
+                        {% for log in logs %}<div class="log-warn">{{ log }}</div>{% empty %}
+                        <div class="log-info">No violation logs recorded yet.</div>{% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div>
+                <div class="portal-card">
+                    <h3 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="eye" size="sm" only %} AI Computer Vision Snapshots</h3>
+                    <div class="snapshot-grid">
+                        {% for snap in snapshots %}
+                        <img src="{{ snap.image.url }}" alt="Violation snapshot" class="snapshot-img">
+                        {% empty %}
+                        <div class="snapshot-placeholder">No snapshots captured</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endwith %}
+        {% endwith %}
+        {% else %}
+        <div class="portal-card">
+            <p class="flagged-session-select-hint">Select a flagged session from the audit list.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+</div>

@@ -1,0 +1,7 @@
+{% load static %}
+<img src="{% get_static_prefix %}icons/flaticon/{{ name }}.svg"
+     class="portal-icon portal-icon--{{ size|default:'md' }}{% if css_class %} {{ css_class }}{% endif %}"
+     width="{% if size == 'sm' %}16{% elif size == 'lg' %}32{% elif size == 'xl' %}40{% else %}20{% endif %}"
+     height="{% if size == 'sm' %}16{% elif size == 'lg' %}32{% elif size == 'xl' %}40{% else %}20{% endif %}"
+     loading="lazy"
+     {% if alt %}alt="{{ alt }}"{% else %}alt="" aria-hidden="true"{% endif %}>

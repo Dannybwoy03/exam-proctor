@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}Access denied — Exam Proctor{% endblock %}
+{% block body %}
+{% include "errors/unauthorized_state.html" with title="403 - Forbidden" description="You don't have permission to view this page. Contact your instructor or administrator if you need access." home_url=home_url left_icon="shield" center_icon="lock" right_icon="warning" %}
+{% endblock %}

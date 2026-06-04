@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Redeem Access Code — Exam Proctor{% endblock %}
+{% block body %}
+{% include "includes/portal_header_student.html" with student_nav_redeem="active" %}
+<div class="portal-page">
+    <div style="max-width:480px;margin:2rem auto;">
+        <div class="portal-card">
+            <h2 class="portal-card-title">Redeem Exam Access Code</h2>
+            <p style="color:var(--color-text-muted);font-size:0.875rem;margin:0 0 1.25rem;">
+                Enter the code your instructor gave you. It is not case-sensitive.
+                Each code unlocks <strong>one specific exam</strong>, not a whole course — if you have multiple exams to take, you'll need a code for each one.
+            </p>
+
+            {% if already_redeemed and redeemed_exam %}
+            <div class="portal-notice-card portal-notice-card--compact" style="margin-bottom:1rem;">
+                <div class="portal-notice-content">
+                    <strong class="portal-notice-title">Code already redeemed</strong>
+                    <p class="portal-notice-body">
+                        You have already used this code for <strong>{{ redeemed_exam.title }}</strong>
+                        ({{ redeemed_exam.course.code }}). You cannot redeem the same code twice.
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
+            <form method="post"{% if already_redeemed %} aria-disabled="true"{% endif %}>
+                {% csrf_token %}
+                <div class="portal-form-field {% if form.code.errors %}auth-field--error{% endif %}" style="margin-bottom:1rem;">
+                    <label for="{{ form.code.id_for_label }}" style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:0.35rem;">Access Code</label>
+                    <input type="text"
+                           name="code"
+                           id="{{ form.code.id_for_label }}"
+                           value="{{ form.code.value|default:'' }}"
+                           maxlength="16"
+                           class="redeem-code-input{% if already_redeemed %} redeem-code-input--locked{% endif %}"
+                           {% if already_redeemed %}readonly aria-readonly="true"{% endif %}
+                           autocomplete="off"
+                           spellcheck="false">
+                    {% for error in form.code.errors %}
+                        <p class="field-error">{{ error }}</p>
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <p class="field-error">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+                    {% if already_redeemed and redeemed_exam %}
+                    <a href="{% url 'accounts:dashboard' %}" class="btn btn-primary">Go to Dashboard</a>
+                    {% if redeemed_exam.is_published and redeemed_exam.is_available %}
+                    <a href="{% url 'exams:start' redeemed_exam.pk %}" class="btn btn-outline btn-sm">Start Exam</a>
+                    {% endif %}
+                    {% else %}
+                    <button type="submit" class="btn btn-primary">Redeem Code</button>
+                    {% endif %}
+                    <a href="{% url 'accounts:dashboard' %}" class="btn btn-ghost btn-sm">Back to Dashboard</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<style>
+.redeem-code-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 1.1rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-weight: 600;
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+.redeem-code-input--locked {
+    background: var(--color-bg-alt, #eef1f0);
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+}
+</style>
+{% endblock %}

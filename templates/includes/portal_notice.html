@@ -1,0 +1,7 @@
+<div class="portal-notice-card{% if compact %} portal-notice-card--compact{% endif %}">
+    <div class="portal-notice-icon">{% include "includes/icon.html" with name=icon size="sm" only %}</div>
+    <div class="portal-notice-content">
+        <strong class="portal-notice-title">{{ title }}</strong>
+        {% if body %}<p class="portal-notice-body">{{ body }}</p>{% endif %}
+    </div>
+</div>

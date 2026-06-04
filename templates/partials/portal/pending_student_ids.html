@@ -1,0 +1,40 @@
+<div class="portal-page" data-portal-nav="student_ids" data-portal-title="Student ID Reviews">
+{% if messages %}
+<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+{% endif %}
+
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">Student ID Reviews</h1>
+        <p class="admin-page-subtitle">Manually verify students whose KNUST ID couldn't be confirmed automatically</p>
+    </div>
+    {% include "includes/portal_tab_link.html" with href=dashboard_url label="← Dashboard" class="btn btn-outline btn-sm" only %}
+</div>
+
+<section class="portal-card">
+    <div class="admin-card-header">
+        <h2 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="id-card" size="sm" only %} Pending Student ID Verifications</h2>
+    </div>
+    {% for item in student_items %}
+    {% with s=item.profile %}
+    <div class="admin-teacher-row admin-teacher-row-list">
+        {% if s.user.profile_photo %}
+        <img src="{{ s.user.profile_photo.url }}" alt="" class="admin-teacher-photo">
+        {% else %}
+        <div class="admin-teacher-avatar">{{ s.user.first_name|slice:":1"|default:s.user.username|slice:":1"|upper }}</div>
+        {% endif %}
+        <div class="admin-teacher-info">
+            <div class="admin-teacher-name">{{ s.user.get_full_name|default:s.user.username }}</div>
+            <div class="admin-teacher-meta">{{ s.user.email }}</div>
+            <div class="admin-teacher-meta">{{ s.programme|default:"—" }} · Index: {{ s.student_id_number }}</div>
+        </div>
+        <div class="admin-teacher-actions">
+            {% include "includes/portal_tab_link.html" with href=item.review_url label="Review ID" class="btn btn-primary btn-sm" only %}
+        </div>
+    </div>
+    {% endwith %}
+    {% empty %}
+    <p class="admin-empty">No student ID reviews pending.</p>
+    {% endfor %}
+</section>
+</div>
