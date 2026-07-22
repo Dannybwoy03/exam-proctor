@@ -20,7 +20,10 @@
         </div>
         <div class="faculty-list-actions">
             <a href="{% url 'exams:question_bank_builder' b.pk %}" class="btn btn-outline btn-sm" data-portal-full>Open Builder</a>
-            <a href="{% url 'exams:question_add' b.pk %}" class="btn btn-primary btn-sm" data-portal-full>Add Question</a>
+            <form method="post" action="{% url 'exams:question_add' b.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-sm">Add Question</button>
+            </form>
         </div>
     </div>
 </div>

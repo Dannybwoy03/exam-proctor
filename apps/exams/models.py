@@ -110,9 +110,10 @@ class Exam(models.Model):
     class StrictnessLevel(models.TextChoices):
         # Practice / open-book: no lockdown enforcement, no ML violation reactions.
         NONE = "none", "Not strict — no proctoring checks"
-        # Three-strike rule: warnings on tab-switch / focus-loss / fullscreen-exit
-        # and ML-detected violations; exam terminates on the 3rd strike.
-        LEVEL_1 = "level_1", "Level 1 — 3-strike tolerance"
+        # Strike rule: warnings on tab-switch / focus-loss / fullscreen-exit
+        # and ML-detected violations; exam terminates on the final strike
+        # (max_strikes, default 5).
+        LEVEL_1 = "level_1", "Level 1 — 5-strike tolerance"
         # Zero-tolerance: any violation terminates the exam immediately.
         LEVEL_2 = "level_2", "Level 2 — no second chances"
 
@@ -152,7 +153,7 @@ class Exam(models.Model):
         choices=StrictnessLevel.choices,
         default=StrictnessLevel.LEVEL_1,
         help_text=(
-            "Lockdown policy for this exam. Level 1 (default) follows the 3-strike "
+            "Lockdown policy for this exam. Level 1 (default) follows the 5-strike "
             "rule; Level 2 is zero-tolerance; 'Not strict' disables all checks."
         ),
     )
@@ -344,11 +345,25 @@ RESUMABLE_ATTEMPT_STATUSES = (
 
 
 def get_resumable_attempt(exam, student):
+    """Return the student's open attempt for this exam, if any.
+
+    Attempts whose identity check already failed are not resumable — the
+    student must start a fresh attempt (subject to max_attempts). Ended
+    statuses (submitted / terminated / expired) are excluded by the status
+    filter below.
+    """
+    from apps.proctoring.models import ProctoringSession
+
     return (
         ExamAttempt.objects.filter(
             exam=exam,
             student=student,
             status__in=RESUMABLE_ATTEMPT_STATUSES,
+        )
+        .exclude(
+            proctoring_session__id_verification_status=(
+                ProctoringSession.IDVerificationStatus.FAILED
+            )
         )
         .order_by("-started_at")
         .first()

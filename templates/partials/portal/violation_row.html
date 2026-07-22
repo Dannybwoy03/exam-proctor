@@ -1,10 +1,31 @@
-{% load static %}
-<li class="timeline-item warning violation-row violation-row--{{ v.review_status }}" id="violation-{{ v.pk }}">
+{% load static json_filters %}
+<li class="timeline-item warning violation-row violation-row--{{ v.review_status }}"
+    id="violation-{{ v.pk }}"
+    {% if v.snapshot %}data-snapshot-id="{{ v.snapshot.pk }}"{% endif %}>
     <div class="timeline-time">{{ v.created_at|time:"H:i:s" }}</div>
     <div class="timeline-title">
         Violation {{ v.strike_number }}: {{ v.get_violation_type_display }}
         {% if v.is_disputed %}<span class="disputed-badge" title="Student disputed this violation at {{ v.disputed_at|date:'M d, H:i' }}">Disputed</span>{% endif %}
+        {% if v.acknowledged_at %}<span class="disputed-badge" title="Student acknowledged the strike at {{ v.acknowledged_at|date:'M d, H:i' }}">Acknowledged</span>{% endif %}
         {% if v.severity_overridden %}<span class="disputed-badge" title="Severity manually adjusted">Adjusted</span>{% endif %}
+        {% if v.snapshot %}
+        <button type="button"
+                class="violation-view-snapshot btn btn-outline btn-xs"
+                data-snapshot-open
+                data-image-url="{{ v.snapshot.image.url }}"
+                data-violation-type="{{ v.get_violation_type_display }}"
+                data-confidence="{{ v.confidence }}"
+                data-timestamp="{{ v.created_at|time:'H:i:s' }}"
+                data-bboxes="{{ v.snapshot.bounding_boxes|json_attribute }}"
+                data-pose="{{ v.snapshot.pose_keypoints|json_attribute }}"
+                data-gaze="{{ v.snapshot.gaze_metrics|json_attribute }}"
+                data-frame-width="{{ v.snapshot.frame_width }}"
+                data-frame-height="{{ v.snapshot.frame_height }}"
+                data-clip-frames="{{ v.clip_frame_urls|json_attribute }}"
+                data-violation-id="{{ v.pk }}">
+            View CV snapshot
+        </button>
+        {% endif %}
         <span class="violation-meta">
             severity <strong>{{ v.get_severity_display }}</strong>
             · status <strong>{{ v.get_review_status_display }}</strong>
@@ -12,6 +33,7 @@
         </span>
     </div>
 
+    {% if not audit_readonly %}
     <form class="violation-actions"
           hx-post="{% url 'proctoring:review_violation' v.pk %}"
           hx-target="#violation-{{ v.pk }}"
@@ -50,4 +72,5 @@
             </button>
         </div>
     </form>
+    {% endif %}
 </li>

@@ -56,6 +56,21 @@
 
     document.body.addEventListener("htmx:pushedIntoHistory", syncFromMain);
 
+    // ── HTMX failure fallback ───────────────────────────────────────────────
+    // Without these, a failed tab-load leaves the previous page in #portal-main
+    // with no feedback. Fall back to a full navigation so the browser shows
+    // the real error (or recovers via a normal page load).
+    function portalNavFallback(event) {
+        const path = event.detail && event.detail.pathInfo;
+        const url = path && (path.finalRequestPath || path.requestPath);
+        if (url) {
+            window.location.href = url;
+        }
+    }
+    document.body.addEventListener("htmx:responseError", portalNavFallback);
+    document.body.addEventListener("htmx:sendError", portalNavFallback);
+    document.body.addEventListener("htmx:swapError", portalNavFallback);
+
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", () => initFlaggedSessionCards(document));
     } else {

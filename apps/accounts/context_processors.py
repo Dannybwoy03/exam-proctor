@@ -54,6 +54,9 @@ def portal_sidebar(request):
             id_review_status=StudentProfile.IDReviewStatus.PENDING
         ).count()
         ctx["published_exams"] = Exam.objects.filter(is_published=True).count()
+        ctx["flagged_sessions"] = ProctoringSession.objects.filter(
+            strike_count__gt=0
+        ).count()
     elif user.is_teacher_user:
         # Teacher sidebar badge: flagged sessions for exams in their courses.
         ctx["flagged_sessions"] = ProctoringSession.objects.filter(

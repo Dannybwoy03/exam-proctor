@@ -13,7 +13,7 @@ class ProctoringSession(models.Model):
         ExamAttempt, on_delete=models.CASCADE, related_name="proctoring_session"
     )
     strike_count = models.PositiveIntegerField(default=0)
-    max_strikes = models.PositiveIntegerField(default=3)
+    max_strikes = models.PositiveIntegerField(default=5)
     id_verification_status = models.CharField(
         max_length=20,
         choices=IDVerificationStatus.choices,
@@ -23,6 +23,23 @@ class ProctoringSession(models.Model):
     lockdown_active = models.BooleanField(default=False)
     last_frame_at = models.DateTimeField(null=True, blank=True)
     last_heartbeat_at = models.DateTimeField(null=True, blank=True)
+    absent_frame_streak = models.PositiveIntegerField(
+        default=0,
+        help_text="Consecutive ML frames with no person detected (for absent rule).",
+    )
+    multi_person_frame_streak = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Consecutive ML frames with 2+ persons detected (multiple-person "
+            "rule only strikes after MULTIPLE_PERSON_CONSECUTIVE_FRAMES)."
+        ),
+    )
+    # Sustained look-away tracking. A strike only fires once the student has
+    # been looking away continuously for PROCTORING['LOOK_AWAY_SECONDS']; brief
+    # glances reset the timer. ``look_away_struck`` prevents a single long
+    # episode from generating repeated strikes (cleared when they look back).
+    look_away_started_at = models.DateTimeField(null=True, blank=True)
+    look_away_struck = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Proctoring — attempt {self.attempt_id}"
@@ -97,6 +114,9 @@ class ViolationLog(models.Model):
     # review and can choose how to weigh the violation.
     is_disputed = models.BooleanField(default=False)
     disputed_at = models.DateTimeField(null=True, blank=True)
+    # Student acknowledged the strike alert. Recorded for the audit trail so a
+    # teacher can see the student was warned and confirmed they saw it.
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
     # Teacher-side adjudication.
     review_status = models.CharField(
         max_length=20,
@@ -137,3 +157,29 @@ class ViolationSnapshot(models.Model):
     )
     image = models.ImageField(upload_to="violations/")
     bounding_boxes = models.JSONField(default=list, blank=True)
+    pose_keypoints = models.JSONField(default=list, blank=True)
+    # Iris gaze at the moment of the strike, e.g. {"h_ratio": 0.31,
+    # "v_ratio": 0.55, "off_screen": true}. Empty when gaze wasn't measured.
+    gaze_metrics = models.JSONField(default=dict, blank=True)
+    frame_width = models.PositiveIntegerField(default=0)
+    frame_height = models.PositiveIntegerField(default=0)
+
+
+class ViolationClipFrame(models.Model):
+    """A frame from the short burst the browser uploads on each strike.
+
+    Unlike ``ViolationSnapshot`` (a single server-annotated frame with bbox +
+    pose), these are the raw lead-up frames the client buffered, stored in
+    sequence so a teacher can scrub the moment that triggered the strike.
+    """
+
+    violation = models.ForeignKey(
+        ViolationLog, on_delete=models.CASCADE, related_name="clip_frames"
+    )
+    image = models.ImageField(upload_to="violation_clips/")
+    sequence = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sequence"]
+        indexes = [models.Index(fields=["violation", "sequence"])]

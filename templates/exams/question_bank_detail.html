@@ -12,7 +12,10 @@
             </div>
             <div class="faculty-list-actions">
                 <a href="{% url 'exams:question_bank_import' bank.pk %}" class="btn btn-outline btn-sm">Import CSV</a>
-                <a href="{% url 'exams:question_add' bank.pk %}" class="btn btn-primary btn-sm">+ Add Question</a>
+                <form method="post" action="{% url 'exams:question_add' bank.pk %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary btn-sm">+ Add Question</button>
+                </form>
             </div>
         </div>
 

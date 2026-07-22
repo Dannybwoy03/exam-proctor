@@ -11,9 +11,10 @@
 | **Deployment** | Single local machine (dev/demo), **no GPU** — CPU-only YOLO inference |
 | **Question types** | **MCQ + short text** — MCQ auto-graded; short answers flagged for **manual teacher review** |
 | **Exam access** | **Exam code/link** — teacher generates a code; student must enter code to start |
-| **ID verification** | **ID card in frame + face match** against registration profile photo (no external university DB) |
+| **ID verification** | **ID card in frame + face match** against the live face scan captured at registration (InsightFace ArcFace embedding in `StudentProfile.face_embedding`; no external university DB) |
 | **Authentication** | **Django session auth** — server-rendered HTML pages, traditional login forms |
-| **Lockdown** | **Strict** — fullscreen required entire exam; tab switch / blur = immediate strike |
+| **Lockdown** | **Teacher-configurable strictness** — `none` / `level_1` (3-strike) / `level_2` (zero tolerance); fullscreen + tab/focus violations at level 1+ |
+| **Proctoring ML** | **YOLOv5n** object detection + **YOLOv8n-pose** skeleton capture on CPU via Celery; snapshots stored on `ViolationLog` |
 | **Disconnect policy** | **Pause timer** — 2-minute grace period to reconnect; timer frozen while offline |
 | **Question authoring** | **Question banks per course** — Question Builder UI, manual entry + CSV bulk import; teachers attach bank questions to exams |
 | **Exam publication** | **Admin approval required** — teacher submits exam + questions + start/end window; admin approves before publish |
@@ -219,7 +220,7 @@ erDiagram
 
 - **ProctoringSession** — strikes, ID verification status, lockdown flag
 - **IDVerificationAttempt** — ID + face match scores
-- **ViolationLog**, **ViolationSnapshot**
+- **ViolationLog**, **ViolationSnapshot** (`image`, `bounding_boxes`, `pose_keypoints`, frame dimensions)
 
 ---
 
@@ -231,7 +232,7 @@ Teachers build exams from **reusable question banks** scoped to a course. Questi
 
 The faculty portal exposes a top tab bar on the teacher dashboard:
 
-**Dashboard** · **Question Banks** · **Exams** · **Courses** · **Flagged Sessions**
+**Dashboard** · **Question Banks** · **Exams** · **Courses** · **Flagged Sessions** (teachers) · **Proctoring Audit** (admins, read-only)
 
 The dashboard **Question Banks** panel lists recent banks with a direct link to **Open Builder**.
 
@@ -494,11 +495,11 @@ Base: `/api/v1/` for JSON (proctor JS). Most pages are server-rendered with sess
 
 ### Pattern: accept → queue → infer → push
 
-Django view validates and enqueues Celery task, returns immediately. Worker runs YOLOv5n, writes violations, pushes via Channels.
+Django view validates and enqueues Celery task, returns immediately. Worker runs **YOLOv5n** (objects) and **YOLOv8n-pose** (skeleton keypoints), writes violations + snapshots, pushes via Channels.
 
 **ID verification worker** (queue: `id_verification`, concurrency=1):
 1. ID card CNN (confidence >= 0.85)
-2. Face match vs registration embedding (score >= 0.75)
+2. Face match vs registration face-scan embedding (InsightFace `buffalo_l` ArcFace, cosine similarity >= 0.35, `ml/face_id`)
 
 **Local CPU tuning**: YOLOv5n, 3–4s frame interval, Celery concurrency=1, ~5–10 concurrent exams.
 
@@ -550,8 +551,8 @@ Atomic increment on `ProctoringSession` with `select_for_update()`. Lockdown eve
 | 1 | Django scaffold, models, session auth, exam codes, MCQ auto-grade, manual review queue, **question bank workflow**, **Question Builder UI**, **admin exam approval**, **freeze/add time** |
 | 1b | Student/teacher ID OCR registration, admin/teacher dashboards (Figma UI) |
 | 2 | Celery, Redis, Channels, lockdown JS, timer pause, three-strike (mock ML) |
-| 3 | YOLOv5n, ID classifier, face_recognition, snapshot storage |
-| 4 | Manual grading UI polish, My Marks, question analytics, tests |
+| 3 | **YOLOv5n + YOLOv8n-pose**, violation snapshots (bbox + pose JSON), exam-time ID/face verify, admin read-only proctoring audit |
+| 4 | Manual grading UI polish, My Marks, question analytics, expanded test suite |
 
 ---
 

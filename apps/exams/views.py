@@ -5,10 +5,12 @@ from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from pathlib import Path
 
 from django.conf import settings
+from django_ratelimit.decorators import ratelimit
 
 from apps.accounts.decorators import role_required
 from apps.accounts.models import User
@@ -43,6 +45,45 @@ from .models import (
 from .permissions import get_bank_for_user, get_exam_for_user, get_question_for_user
 from .services.exam_control import add_exam_time, freeze_exam, unfreeze_exam
 from .services.question_import import import_questions_from_csv
+
+
+ENDED_ATTEMPT_STATUSES = (
+    ExamAttempt.Status.SUBMITTED,
+    ExamAttempt.Status.TERMINATED,
+    ExamAttempt.Status.EXPIRED,
+)
+
+
+def _no_store(response):
+    """Prevent bfcache / intermediary caching of exam content."""
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    response["Pragma"] = "no-cache"
+    return response
+
+
+def _attempt_is_writable(attempt):
+    """True only while the attempt is actively in progress.
+
+    Disconnect-paused attempts must reconnect (WS / reconnect endpoint)
+    before answers can be saved or submitted — otherwise a frozen timer
+    plus HTTP autosave grants unbounded wall-clock time.
+    """
+    return attempt.status == ExamAttempt.Status.IN_PROGRESS
+
+
+def _enforce_attempt_deadline(attempt):
+    """Expire an open attempt whose clock has hit zero. Returns True if expired."""
+    if attempt.status in ENDED_ATTEMPT_STATUSES:
+        return False
+    if attempt.status == ExamAttempt.Status.PENDING_ID:
+        return False
+    if attempt.computed_remaining_seconds > 0:
+        return False
+    attempt.status = ExamAttempt.Status.EXPIRED
+    attempt.ended_at = timezone.now()
+    attempt.save(update_fields=["status", "ended_at"])
+    grade_attempt(attempt)
+    return True
 
 
 @role_required(User.Role.TEACHER, User.Role.ADMIN)
@@ -171,6 +212,14 @@ def exam_submit_for_approval(request, pk):
     # exam_detail template hides the button for admins; this is the matching
     # server-side gate so a URL-typed POST still 403s.
     exam = get_exam_for_user(request.user, pk)
+    if exam.approval_status not in (
+        Exam.ApprovalStatus.DRAFT,
+        Exam.ApprovalStatus.REJECTED,
+    ):
+        # Pending or already-approved (possibly live) exams must not be
+        # flipped back to pending while students can still sit them.
+        messages.error(request, "This exam has already been submitted or approved.")
+        return redirect("exams:detail", pk=pk)
     if not exam.exam_questions.exists():
         messages.error(request, "Add questions to the exam before submitting for approval.")
         return redirect("exams:exam_questions", pk=pk)
@@ -272,69 +321,99 @@ def available_exams(request):
     return render(request, "exams/available.html", {"exams": exams})
 
 
+@never_cache
+@require_POST  # GET must not create attempts (link prefetchers can burn them)
 @role_required(User.Role.STUDENT)
 def start_exam(request, pk):
     exam = get_object_or_404(Exam, pk=pk, is_published=True)
     if not exam.is_available():
         messages.error(request, "This exam is not available right now.")
-        return redirect("accounts:dashboard")
+        return _no_store(redirect("accounts:dashboard"))
     if exam.requires_access_code and not ExamCodeRedemption.objects.filter(
         access_code__exam=exam, student=request.user
     ).exists():
         messages.error(request, "Redeem an access code first.")
-        return redirect("exams:redeem")
+        return _no_store(redirect("exams:redeem"))
 
     existing = get_resumable_attempt(exam, request.user)
     if existing:
-        return redirect("exams:take", attempt_id=existing.pk)
+        return _no_store(redirect("exams:take", attempt_id=existing.pk))
 
-    if exam.max_attempts:
+    from apps.proctoring.models import ProctoringSession
+
+    needs_proctoring = exam.strictness_level != Exam.StrictnessLevel.NONE
+    # Count + create atomically so two parallel starts can't both pass the
+    # max_attempts check. Locking the student row serializes starts per
+    # student (attempt rows can't be locked — there may be none yet).
+    with transaction.atomic():
+        User.objects.select_for_update().get(pk=request.user.pk)
         count = ExamAttempt.objects.filter(exam=exam, student=request.user).count()
-        if count >= exam.max_attempts:
+        if exam.max_attempts and count >= exam.max_attempts:
             messages.error(
                 request,
                 "Maximum attempts reached for this exam. Contact your instructor if you need another attempt.",
             )
-            return redirect("accounts:dashboard")
+            return _no_store(redirect("accounts:dashboard"))
 
-    from apps.proctoring.models import ProctoringSession
+        attempt = ExamAttempt.objects.create(
+            exam=exam,
+            student=request.user,
+            attempt_number=count + 1,
+            status=(
+                ExamAttempt.Status.PENDING_ID
+                if needs_proctoring
+                else ExamAttempt.Status.IN_PROGRESS
+            ),
+            remaining_seconds=exam.effective_duration_minutes * 60,
+        )
+        ProctoringSession.objects.create(
+            attempt=attempt,
+            id_verification_status=(
+                ProctoringSession.IDVerificationStatus.PENDING
+                if needs_proctoring
+                else ProctoringSession.IDVerificationStatus.PASSED
+            ),
+            lockdown_active=not needs_proctoring,
+        )
+    return _no_store(redirect("exams:take", attempt_id=attempt.pk))
 
-    attempt = ExamAttempt.objects.create(
-        exam=exam,
-        student=request.user,
-        attempt_number=ExamAttempt.objects.filter(exam=exam, student=request.user).count() + 1,
-        status=ExamAttempt.Status.IN_PROGRESS,
-        remaining_seconds=exam.effective_duration_minutes * 60,
-    )
-    ProctoringSession.objects.create(
-        attempt=attempt,
-        id_verification_status=ProctoringSession.IDVerificationStatus.PASSED,
-        lockdown_active=True,
-    )
-    return redirect("exams:take", attempt_id=attempt.pk)
 
-
+@never_cache
 @role_required(User.Role.STUDENT)
 def take_exam(request, attempt_id):
     attempt = get_object_or_404(
         ExamAttempt, pk=attempt_id, student=request.user
     )
-    if attempt.status == ExamAttempt.Status.PENDING_ID:
-        from apps.proctoring.models import ProctoringSession
-
-        attempt.status = ExamAttempt.Status.IN_PROGRESS
-        attempt.save(update_fields=["status"])
-        session = getattr(attempt, "proctoring_session", None)
-        if session:
-            session.id_verification_status = ProctoringSession.IDVerificationStatus.PASSED
-            session.lockdown_active = True
-            session.save(update_fields=["id_verification_status", "lockdown_active"])
-
+    if attempt.status in ENDED_ATTEMPT_STATUSES:
+        return _no_store(redirect("exams:result", attempt_id=attempt.pk))
     if attempt.status not in (
         ExamAttempt.Status.IN_PROGRESS,
         ExamAttempt.Status.PAUSED,
+        ExamAttempt.Status.PENDING_ID,
     ):
-        return redirect("exams:result", attempt_id=attempt.pk)
+        return _no_store(redirect("exams:result", attempt_id=attempt.pk))
+
+    if _enforce_attempt_deadline(attempt):
+        return _no_store(redirect("exams:result", attempt_id=attempt.pk))
+
+    session = getattr(attempt, "proctoring_session", None)
+    # Identity check already failed for this attempt — do not let the student
+    # reopen it via a bookmark or "Continue Exam". Close it if somehow still
+    # pending_id, then send them to results.
+    if (
+        session
+        and session.id_verification_status
+        == session.IDVerificationStatus.FAILED
+    ):
+        if attempt.status == ExamAttempt.Status.PENDING_ID:
+            attempt.status = ExamAttempt.Status.TERMINATED
+            attempt.ended_at = timezone.now()
+            attempt.save(update_fields=["status", "ended_at"])
+        messages.error(
+            request,
+            "Identity verification failed for this attempt. Start a new attempt if attempts remain.",
+        )
+        return _no_store(redirect("accounts:dashboard"))
 
     if attempt.exam.is_frozen and attempt.status != ExamAttempt.Status.PAUSED:
         attempt.status = ExamAttempt.Status.PAUSED
@@ -342,14 +421,20 @@ def take_exam(request, attempt_id):
         attempt.pause_reason = ExamAttempt.PauseReason.FREEZE
         attempt.save(update_fields=["status", "timer_paused_at", "pause_reason"])
 
-    questions = list(attempt.exam.exam_questions.select_related("question"))
-    if attempt.exam.shuffle_questions:
-        import random
+    # Content protection: never send question text to the browser before
+    # identity verification has passed — otherwise a student could read the
+    # whole paper from the DOM while "verifying". The client reloads once the
+    # ID check flips the attempt to IN_PROGRESS.
+    if attempt.status == ExamAttempt.Status.PENDING_ID:
+        questions = []
+    else:
+        questions = list(attempt.exam.exam_questions.select_related("question"))
+        if attempt.exam.shuffle_questions:
+            import random
 
-        random.shuffle(questions)
+            random.shuffle(questions)
 
-    session = getattr(attempt, "proctoring_session", None)
-    total_questions = len(questions)
+    total_questions = attempt.exam.exam_questions.count()
     if session:
         max_strikes = session.max_strikes
         strikes_remaining = max(0, max_strikes - (session.strike_count or 0))
@@ -357,7 +442,7 @@ def take_exam(request, attempt_id):
         max_strikes = settings.PROCTORING["MAX_STRIKES"]
         strikes_remaining = max_strikes
 
-    return render(
+    response = render(
         request,
         "exams/take_exam.html",
         {
@@ -367,19 +452,18 @@ def take_exam(request, attempt_id):
             "total_questions": total_questions,
             "session_code": f"KNUST-{attempt.pk:04d}-AX",
             "strikes_remaining": strikes_remaining,
+            "proctor_config": {
+                "frame_interval_ms": settings.PROCTORING["FRAME_INTERVAL_SECONDS"] * 1000,
+                "clip_frame_count": settings.PROCTORING["CLIP_FRAME_COUNT"],
+                "clip_buffer_interval_ms": settings.PROCTORING["CLIP_BUFFER_INTERVAL_MS"],
+            },
         },
     )
+    return _no_store(response)
 
 
-@require_POST
-@role_required(User.Role.STUDENT)
-def save_answers(request, attempt_id):
-    attempt = get_object_or_404(
-        ExamAttempt,
-        pk=attempt_id,
-        student=request.user,
-        status__in=[ExamAttempt.Status.IN_PROGRESS, ExamAttempt.Status.PAUSED],
-    )
+def _apply_posted_answers(attempt, post_data):
+    """Persist q_* answer fields onto the attempt (autosave and final submit)."""
     # Pre-load valid question ids and their types for this exam so we route
     # each answer into the right column without an extra query per item.
     valid_questions = dict(
@@ -387,7 +471,7 @@ def save_answers(request, attempt_id):
         .values_list("question_id", "question__question_type")
     )
 
-    for key, value in request.POST.items():
+    for key, value in post_data.items():
         if not key.startswith("q_"):
             continue
         try:
@@ -407,21 +491,64 @@ def save_answers(request, attempt_id):
             answer.text_answer = value
             answer.selected_option = None
         answer.save()
-    return JsonResponse({"saved": True})
 
 
+@never_cache
+@require_POST
+@role_required(User.Role.STUDENT)
+@ratelimit(key="user", rate="60/m", method="POST", block=True)
+def save_answers(request, attempt_id):
+    with transaction.atomic():
+        attempt = get_object_or_404(
+            ExamAttempt.objects.select_for_update(),
+            pk=attempt_id,
+            student=request.user,
+        )
+        if attempt.status in ENDED_ATTEMPT_STATUSES:
+            return _no_store(
+                JsonResponse({"saved": False, "error": "Attempt has ended."}, status=409)
+            )
+        if _enforce_attempt_deadline(attempt):
+            return _no_store(
+                JsonResponse(
+                    {"saved": False, "error": "Time expired.", "expired": True},
+                    status=409,
+                )
+            )
+        if not _attempt_is_writable(attempt):
+            return _no_store(
+                JsonResponse({"saved": False, "error": "Attempt is not writable."}, status=409)
+            )
+        _apply_posted_answers(attempt, request.POST)
+    return _no_store(JsonResponse({"saved": True}))
+
+
+@never_cache
 @require_POST
 @role_required(User.Role.STUDENT)
 def submit_exam(request, attempt_id):
-    attempt = get_object_or_404(ExamAttempt, pk=attempt_id, student=request.user)
-    if attempt.status in (ExamAttempt.Status.SUBMITTED, ExamAttempt.Status.TERMINATED):
-        return redirect("exams:result", attempt_id=attempt.pk)
-    attempt.status = ExamAttempt.Status.SUBMITTED
-    attempt.ended_at = timezone.now()
-    attempt.save()
+    with transaction.atomic():
+        attempt = get_object_or_404(
+            ExamAttempt.objects.select_for_update(), pk=attempt_id, student=request.user
+        )
+        if attempt.status in ENDED_ATTEMPT_STATUSES:
+            return _no_store(redirect("exams:result", attempt_id=attempt.pk))
+        if _enforce_attempt_deadline(attempt):
+            return _no_store(redirect("exams:result", attempt_id=attempt.pk))
+        # PENDING_ID must not submit (would bypass identity verification) and
+        # a paused attempt must reconnect first.
+        if not _attempt_is_writable(attempt):
+            messages.error(request, "This attempt cannot be submitted right now.")
+            return _no_store(redirect("exams:take", attempt_id=attempt.pk))
+        # The submit form posts the latest q_* fields — persist them so the
+        # final answers aren't limited to the last autosave cycle.
+        _apply_posted_answers(attempt, request.POST)
+        attempt.status = ExamAttempt.Status.SUBMITTED
+        attempt.ended_at = timezone.now()
+        attempt.save()
     grade_attempt(attempt)
     messages.success(request, "Exam submitted.")
-    return redirect("exams:result", attempt_id=attempt.pk)
+    return _no_store(redirect("exams:result", attempt_id=attempt.pk))
 
 
 @require_POST
@@ -433,6 +560,11 @@ def reconnect_exam(request, attempt_id):
         student=request.user,
         status=ExamAttempt.Status.PAUSED,
     )
+    # Only a disconnect pause may be resumed by the student. An admin FREEZE
+    # is released exclusively by the admin unfreeze action (mirrors the
+    # WebSocket consumer, which refuses to resume frozen attempts).
+    if attempt.pause_reason == ExamAttempt.PauseReason.FREEZE:
+        return JsonResponse({"status": "frozen"}, status=409)
     if attempt.timer_paused_at:
         elapsed = (timezone.now() - attempt.timer_paused_at).total_seconds()
         if elapsed > attempt.disconnect_grace_seconds:
@@ -441,13 +573,18 @@ def reconnect_exam(request, attempt_id):
             attempt.save()
             grade_attempt(attempt)
             return JsonResponse({"status": "expired"})
+    if _enforce_attempt_deadline(attempt):
+        return JsonResponse({"status": "expired"})
     attempt.status = ExamAttempt.Status.IN_PROGRESS
     attempt.timer_paused_at = None
     attempt.pause_reason = ""
     attempt.save()
-    return JsonResponse({"status": "resumed", "remaining_seconds": attempt.remaining_seconds})
+    return JsonResponse(
+        {"status": "resumed", "remaining_seconds": attempt.computed_remaining_seconds}
+    )
 
 
+@never_cache
 @role_required(User.Role.STUDENT, User.Role.TEACHER, User.Role.ADMIN)
 def exam_result(request, attempt_id):
     attempt = get_object_or_404(
@@ -459,7 +596,7 @@ def exam_result(request, attempt_id):
     is_student = request.user.is_student_user
     if is_student and attempt.student_id != request.user.id:
         messages.error(request, "Not allowed.")
-        return redirect("accounts:dashboard")
+        return _no_store(redirect("accounts:dashboard"))
     if request.user.is_teacher_user:
         # Teachers may only view results for exams in their own courses.
         from django.core.exceptions import PermissionDenied
@@ -467,11 +604,27 @@ def exam_result(request, attempt_id):
         teacher_profile = getattr(request.user, "teacher_profile", None)
         if not teacher_profile or attempt.exam.course.teacher_id != teacher_profile.pk:
             raise PermissionDenied
+
+    # Students must not open the result URL mid-attempt (question-text leak).
+    if is_student and attempt.status not in ENDED_ATTEMPT_STATUSES:
+        if attempt.status in (
+            ExamAttempt.Status.IN_PROGRESS,
+            ExamAttempt.Status.PAUSED,
+            ExamAttempt.Status.PENDING_ID,
+        ):
+            return _no_store(redirect("exams:take", attempt_id=attempt.pk))
+        return _no_store(redirect("accounts:dashboard"))
+
     # Students only see scoring if the exam allows immediate release.
     # Teachers/admins always see full results.
     show_score = (not is_student) or attempt.exam.show_results_immediately
     result = getattr(attempt, "result", None)
-    answers = attempt.answers.select_related("question")
+    # Defense in depth: withhold answer rows when scores are delayed.
+    answers = (
+        attempt.answers.select_related("question")
+        if show_score
+        else Answer.objects.none()
+    )
 
     # Proctoring notes that the teacher wrote on flagged violations. Students
     # only see entries the teacher has explicitly written a message on, so an
@@ -490,16 +643,18 @@ def exam_result(request, attempt_id):
                 "strike_number",
             )
         )
-    return render(
-        request,
-        "exams/result.html",
-        {
-            "attempt": attempt,
-            "result": result,
-            "answers": answers,
-            "show_score": show_score,
-            "proctoring_notes": proctoring_notes,
-        },
+    return _no_store(
+        render(
+            request,
+            "exams/result.html",
+            {
+                "attempt": attempt,
+                "result": result,
+                "answers": answers,
+                "show_score": show_score,
+                "proctoring_notes": proctoring_notes,
+            },
+        )
     )
 
 
@@ -689,8 +844,8 @@ def question_bank_builder(request, bank_id):
         return redirect("exams:question_banks")
     bank = get_bank_for_user(request.user, bank_id)
     questions = bank.questions.all()
-    qid = request.GET.get("q")
-    active = questions.filter(pk=qid).first() if qid else questions.first()
+    qid = request.GET.get("q", "")
+    active = questions.filter(pk=qid).first() if qid.isdigit() else questions.first()
 
     if request.method == "POST":
         action = request.POST.get("action", "save")
@@ -735,6 +890,7 @@ def question_bank_library(request, bank_id):
     )
 
 
+@require_POST  # creates a row — must not run on GET/prefetch
 @role_required(User.Role.TEACHER, User.Role.ADMIN)
 def question_add(request, bank_id):
     bank = get_bank_for_user(request.user, bank_id)
@@ -828,7 +984,10 @@ def exam_questions(request, pk):
                     valid_ids.update(bank.questions.values_list("pk", flat=True))
                 added = 0
                 for qid in ids:
-                    qid_int = int(qid)
+                    try:
+                        qid_int = int(qid)
+                    except (TypeError, ValueError):
+                        continue
                     if qid_int not in valid_ids or qid_int in existing:
                         continue
                     max_order += 1
@@ -839,13 +998,13 @@ def exam_questions(request, pk):
             else:
                 messages.warning(request, "Select at least one question to add.")
         elif action == "remove":
-            eq_id = request.POST.get("exam_question_id")
-            if eq_id:
+            eq_id = request.POST.get("exam_question_id", "")
+            if str(eq_id).isdigit():
                 exam.exam_questions.filter(pk=eq_id).delete()
                 messages.success(request, "Question removed from exam.")
         elif action == "reorder":
             order_raw = request.POST.get("order", "")
-            order_ids = [x.strip() for x in order_raw.split(",") if x.strip()]
+            order_ids = [x.strip() for x in order_raw.split(",") if x.strip().isdigit()]
             with transaction.atomic():
                 for index, eq_id in enumerate(order_ids):
                     exam.exam_questions.filter(pk=eq_id).update(order=index)
@@ -922,6 +1081,11 @@ def admin_exam_review(request, pk):
 
     if request.method == "POST":
         action = request.POST.get("action")
+        if action in ("approve", "reject") and exam.approval_status != Exam.ApprovalStatus.PENDING:
+            # Approve/reject only applies to exams awaiting review; a direct
+            # POST must not unpublish or re-approve a live exam.
+            messages.error(request, "This exam is not pending review.")
+            return redirect("exams:admin_exam_review", pk=exam.pk)
         if action == "approve":
             exam.approval_status = Exam.ApprovalStatus.APPROVED
             exam.approved_by = request.user

@@ -1,10 +1,35 @@
+import base64
+import binascii
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 
 from ml.id_verification.knust_validator import verify_knust_staff_id, verify_knust_student_id
 
 from .models import AdminProfile, StudentProfile, TeacherProfile, User
+
+FACE_SCAN_MAX_BYTES = 5_000_000  # decoded JPEG from the registration webcam scan
+
+
+def decode_face_scan(data_url: str) -> bytes:
+    """Decode a ``data:image/...;base64,`` URL from the webcam scan.
+
+    Raises ValidationError on malformed or oversized payloads.
+    """
+    payload = data_url.strip()
+    if payload.startswith("data:"):
+        _, _, payload = payload.partition(",")
+    try:
+        raw = base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError):
+        raise ValidationError("Face scan data is invalid. Please retake the scan.")
+    if not raw:
+        raise ValidationError("Face scan is empty. Please retake the scan.")
+    if len(raw) > FACE_SCAN_MAX_BYTES:
+        raise ValidationError("Face scan image is too large. Please retake the scan.")
+    return raw
 
 
 class RegistrationValidationMixin:
@@ -38,9 +63,11 @@ class StudentRegistrationForm(RegistrationValidationMixin, UserCreationForm):
         label="KNUST Student ID Card (photo)",
         help_text="Upload a clear photo of your official KNUST student ID.",
     )
-    profile_photo = forms.ImageField(
-        label="Profile Photo (face)",
-        help_text="Used for face match during exams.",
+    face_scan_data = forms.CharField(
+        label="Face Scan",
+        widget=forms.HiddenInput(),
+        error_messages={"required": "Complete the face scan with your webcam."},
+        help_text="Captured live with your webcam. Used to verify your identity before exams.",
     )
     phone = forms.CharField(max_length=20, required=False)
     email = forms.EmailField(required=True)
@@ -53,7 +80,6 @@ class StudentRegistrationForm(RegistrationValidationMixin, UserCreationForm):
             "first_name",
             "last_name",
             "phone",
-            "profile_photo",
             "password1",
             "password2",
         )
@@ -69,7 +95,7 @@ class StudentRegistrationForm(RegistrationValidationMixin, UserCreationForm):
                 "student_id_number",
                 "programme",
                 "id_proof_image",
-                "profile_photo",
+                "face_scan_data",
                 "phone",
                 "password1",
                 "password2",
@@ -81,6 +107,31 @@ class StudentRegistrationForm(RegistrationValidationMixin, UserCreationForm):
         if StudentProfile.objects.filter(student_id_number__iexact=student_id).exists():
             raise ValidationError("This student ID is already registered.")
         return student_id
+
+    def clean_face_scan_data(self):
+        """Decode the webcam scan and compute the ArcFace embedding.
+
+        Hard-fails when the model is available but finds no face (the scan is
+        live, so the student can simply retake it). Soft-fails to an empty
+        embedding when insightface is not installed, mirroring the OCR
+        soft-fail policy.
+        """
+        from ml.face_id.service import embed_face, face_id_available
+
+        scan_bytes = decode_face_scan(self.cleaned_data["face_scan_data"])
+        self._face_scan_bytes = scan_bytes
+        self._face_embedding = []
+
+        if not face_id_available():
+            return self.cleaned_data["face_scan_data"]
+
+        embedding = embed_face(scan_bytes)
+        if embedding is None:
+            raise ValidationError(
+                "No face detected in your scan. Face the camera in good lighting and retake it."
+            )
+        self._face_embedding = embedding
+        return self.cleaned_data["face_scan_data"]
 
     def clean(self):
         cleaned_data = super().clean()
@@ -107,12 +158,16 @@ class StudentRegistrationForm(RegistrationValidationMixin, UserCreationForm):
         verification = getattr(self, "_id_verification_result", None)
         ocr_passed = bool(verification and verification.is_valid)
         if commit:
+            scan_bytes = getattr(self, "_face_scan_bytes", None)
+            if scan_bytes:
+                user.profile_photo = ContentFile(scan_bytes, name="face_scan.jpg")
             user.save()
             StudentProfile.objects.create(
                 user=user,
                 student_id_number=self.cleaned_data["student_id_number"].strip(),
                 programme=self.cleaned_data["programme"],
                 id_proof_image=self.cleaned_data["id_proof_image"],
+                face_embedding=getattr(self, "_face_embedding", []),
                 id_card_verified=ocr_passed,
                 id_review_status=(
                     StudentProfile.IDReviewStatus.APPROVED

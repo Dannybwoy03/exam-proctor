@@ -98,7 +98,20 @@
             <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="clipboard" size="sm" only %}<span>{% if user.is_admin_user %}All Exams{% else %}Exams{% endif %}</span></span>
             {% if user.is_admin_user and published_exams %}<span class="nav-badge nav-badge-ok">{{ published_exams }}</span>{% endif %}
         </a>
-        {% if user.is_teacher_user %}
+        {% if user.is_admin_user %}
+        <a href="{% url 'admin_proctoring_audit' %}"
+           data-portal-nav="proctoring_audit"
+           class="portal-nav-link {% if portal_nav == 'proctoring_audit' %}active{% endif %}"
+           hx-get="{% url 'admin_proctoring_audit' %}"
+           hx-target="#portal-main"
+           hx-swap="innerHTML show:none settle:120ms"
+           hx-push-url="true"
+           hx-indicator="#portal-loading">
+            <span class="portal-nav-link-inner">{% include "includes/icon.html" with name="eye" size="sm" only %}<span>Proctoring Audit</span></span>
+            {% if flagged_sessions %}<span class="nav-badge">{{ flagged_sessions }}</span>{% endif %}
+        </a>
+        {% endif %}
+        {% if user.is_teacher_user and not user.is_admin_user %}
         <a href="{% url 'flagged_sessions' %}"
            data-portal-nav="flagged"
            class="portal-nav-link {% if portal_nav == 'flagged' %}active{% endif %}"

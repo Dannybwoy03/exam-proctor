@@ -13,6 +13,8 @@ allowed to read the file:
                             admins.
 - ``violations/``         — attempt student only; teacher of the course;
                             admins.
+- ``violation_clips/``    — attempt student only; teacher of the course;
+                            admins (the per-strike frame burst).
 - ``study_materials/``    — enrolled student; teacher of the course; admins.
 
 Anything else is denied. Anonymous requests redirect to login.
@@ -34,7 +36,11 @@ from django.shortcuts import get_object_or_404
 from apps.accounts.models import StudentProfile, TeacherProfile, User
 from apps.courses.models import Course, StudyMaterial
 from apps.exams.models import ExamCodeRedemption
-from apps.proctoring.models import IDVerificationAttempt, ViolationSnapshot
+from apps.proctoring.models import (
+    IDVerificationAttempt,
+    ViolationClipFrame,
+    ViolationSnapshot,
+)
 
 
 def _media_root() -> Path:
@@ -153,6 +159,27 @@ def _can_view_violation_snapshot(viewer: User, rel_path: str) -> bool:
     return False
 
 
+def _can_view_violation_clip(viewer: User, rel_path: str) -> bool:
+    clip_frame = (
+        ViolationClipFrame.objects.filter(image=rel_path)
+        .select_related(
+            "violation__session__attempt__student",
+            "violation__session__attempt__exam__course__teacher__user",
+        )
+        .first()
+    )
+    if not clip_frame:
+        return False
+    exam_attempt = clip_frame.violation.session.attempt
+    if viewer.pk == exam_attempt.student_id:
+        return True
+    if viewer.is_admin_user:
+        return True
+    if viewer.is_teacher_user:
+        return exam_attempt.exam.course.teacher.user_id == viewer.pk
+    return False
+
+
 def _can_view_study_material(viewer: User, rel_path: str) -> bool:
     material = StudyMaterial.objects.filter(file=rel_path).select_related(
         "course__teacher__user"
@@ -175,6 +202,7 @@ _PERMISSION_HANDLERS = {
     "staff_id_proofs/": _can_view_staff_id,
     "id_verification/": _can_view_id_verification_frame,
     "violations/": _can_view_violation_snapshot,
+    "violation_clips/": _can_view_violation_clip,
     "study_materials/": _can_view_study_material,
 }
 
@@ -216,7 +244,7 @@ def serve_media(request, rel_path: str):
     # Conservative caching: never let a CDN cache authenticated PII responses.
     response["Cache-Control"] = "private, no-store"
     # Force download for ID-card images to discourage embedding/hot-linking.
-    if rel_path.startswith(("id_proofs/", "staff_id_proofs/", "id_verification/", "violations/")):
+    if rel_path.startswith(("id_proofs/", "staff_id_proofs/", "id_verification/", "violations/", "violation_clips/")):
         response["Content-Disposition"] = (
             f'inline; filename="{os.path.basename(abs_path)}"'
         )

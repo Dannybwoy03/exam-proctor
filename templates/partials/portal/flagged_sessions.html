@@ -1,7 +1,8 @@
-<div class="portal-page" data-portal-nav="flagged" data-portal-title="Flagged Sessions">
+{% load static json_filters %}
+<div class="portal-page" data-portal-nav="{{ portal_nav|default:'flagged' }}" data-portal-title="{{ portal_page_title|default:'Flagged Sessions' }}">
 <div class="portal-audit-layout">
     <aside class="portal-audit-panel portal-audit-panel--cards" id="audit-list">
-        <div class="faculty-sidebar-section">Audit List</div>
+        <div class="faculty-sidebar-section">{% if audit_readonly %}Proctoring Audit{% else %}Audit List{% endif %}</div>
         <div class="flagged-session-card-list">
         {% for item in flagged_list %}
         {% include "partials/portal/flagged_session_card.html" with item=item selected_session=selected_session only %}
@@ -17,6 +18,7 @@
         {% with attempt=s.attempt %}
         {% include "partials/portal/flagged_session_header.html" with attempt=attempt session=s selected_integrity=selected_integrity %}
 
+        {% if not audit_readonly %}
         <div class="audit-toolbar">
             <button type="button"
                     class="btn btn-outline btn-sm"
@@ -52,6 +54,15 @@
                 </div>
             </form>
         </dialog>
+        {% else %}
+        <div class="portal-notice-card portal-notice-card--compact" style="margin-bottom:1rem;">
+            {% include "includes/icon.html" with name="eye" size="sm" only %}
+            <div class="portal-notice-content">
+                <strong class="portal-notice-title">Read-only audit view</strong>
+                <p class="portal-notice-body">Administrators can preview CV snapshots and pose overlays. Teachers adjudicate violations on their own courses.</p>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="flagged-grid">
             <div>
@@ -63,7 +74,7 @@
                             <div class="timeline-title">Exam Session Authorized</div>
                         </li>
                         {% for v in timeline %}
-                        {% include "partials/portal/violation_row.html" with v=v %}
+                        {% include "partials/portal/violation_row.html" with v=v audit_readonly=audit_readonly %}
                         {% endfor %}
                     </ul>
                 </div>
@@ -77,10 +88,27 @@
             </div>
             <div>
                 <div class="portal-card">
-                    <h3 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="eye" size="sm" only %} AI Computer Vision Snapshots</h3>
+                    <h3 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="eye" size="sm" only %} CV Snapshots</h3>
                     <div class="snapshot-grid">
                         {% for snap in snapshots %}
-                        <img src="{{ snap.image.url }}" alt="Violation snapshot" class="snapshot-img">
+                        <button type="button"
+                                class="snapshot-card-btn"
+                                data-snapshot-open
+                                data-image-url="{{ snap.image.url }}"
+                                data-violation-type="{{ snap.violation.get_violation_type_display }}"
+                                data-confidence="{{ snap.violation.confidence }}"
+                                data-timestamp="{{ snap.violation.created_at|time:'H:i:s' }}"
+                                data-bboxes="{{ snap.bounding_boxes|json_attribute }}"
+                                data-pose="{{ snap.pose_keypoints|json_attribute }}"
+                                data-gaze="{{ snap.gaze_metrics|json_attribute }}"
+                                data-frame-width="{{ snap.frame_width }}"
+                                data-frame-height="{{ snap.frame_height }}"
+                                data-clip-frames="{{ snap.clip_frame_urls|json_attribute }}"
+                                data-violation-id="{{ snap.violation_id }}">
+                            <img src="{{ snap.image.url }}" alt="" class="snapshot-img">
+                            <span class="snapshot-card-label">{{ snap.violation.get_violation_type_display }}</span>
+                            {% if snap.clip_frame_urls %}<span class="snapshot-card-clip" title="{{ snap.clip_frame_urls|length }} clip frame{{ snap.clip_frame_urls|length|pluralize }}">clip</span>{% endif %}
+                        </button>
                         {% empty %}
                         <div class="snapshot-placeholder">No snapshots captured</div>
                         {% endfor %}
@@ -88,6 +116,32 @@
                 </div>
             </div>
         </div>
+
+        <dialog id="snapshot-inspector-dialog" class="portal-modal snapshot-inspector-dialog">
+            <div class="snapshot-inspector-card">
+                <div class="snapshot-inspector-header">
+                    <div>
+                        <strong class="snapshot-inspector-title" id="snapshot-inspector-title">CV Snapshot</strong>
+                        <p class="snapshot-inspector-meta" id="snapshot-inspector-meta"></p>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm" data-snapshot-close aria-label="Close">Close</button>
+                </div>
+                <div class="snapshot-inspector-controls">
+                    <label class="snapshot-toggle"><input type="checkbox" id="snapshot-show-pose" checked> Pose skeleton</label>
+                    <label class="snapshot-toggle"><input type="checkbox" id="snapshot-show-boxes" checked> Object boxes</label>
+                </div>
+                <div class="snapshot-inspector-stage">
+                    <canvas id="snapshot-inspector-canvas" width="640" height="480"></canvas>
+                </div>
+                <div class="snapshot-clip" id="snapshot-clip" hidden>
+                    <div class="snapshot-clip-head">
+                        <strong>Strike clip (lead-up frames)</strong>
+                        <button type="button" class="btn btn-outline btn-xs" id="snapshot-clip-play">Play</button>
+                    </div>
+                    <div class="snapshot-clip-strip" id="snapshot-clip-strip"></div>
+                </div>
+            </div>
+        </dialog>
         {% endwith %}
         {% endwith %}
         {% else %}
@@ -98,3 +152,4 @@
     </div>
 </div>
 </div>
+<script src="{% static 'js/snapshot_inspector.js' %}?v=3"></script>

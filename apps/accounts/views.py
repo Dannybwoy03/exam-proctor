@@ -528,7 +528,7 @@ def dashboard(request):
     for att in past_attempts:
         session = getattr(att, "proctoring_session", None)
         violation_count = session.violations.count() if session else 0
-        max_strikes = session.max_strikes if session else 3
+        max_strikes = session.max_strikes if session else 5
         integrity = max(0, int(100 - (violation_count / max(max_strikes, 1) * 40)))
         past_with_integrity.append(
             {
@@ -838,7 +838,7 @@ def review_teacher(request, pk):
 @require_POST
 @role_required(User.Role.ADMIN)
 def approve_teacher(request, pk):
-    profile = TeacherProfile.objects.select_related("user").get(pk=pk)
+    profile = get_object_or_404(TeacherProfile.objects.select_related("user"), pk=pk)
     action = request.POST.get("action")
     if action == "approve":
         profile.approval_status = TeacherProfile.ApprovalStatus.APPROVED

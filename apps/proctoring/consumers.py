@@ -8,6 +8,12 @@ from apps.exams.models import ExamAttempt
 
 
 class ProctoringConsumer(AsyncJsonWebsocketConsumer):
+    LIVE_STATUSES = (
+        ExamAttempt.Status.PENDING_ID,
+        ExamAttempt.Status.IN_PROGRESS,
+        ExamAttempt.Status.PAUSED,
+    )
+
     async def connect(self):
         self.attempt_id = self.scope["url_route"]["kwargs"]["attempt_id"]
         self.group_name = f"proctoring_{self.attempt_id}"
@@ -25,7 +31,14 @@ class ProctoringConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4403)
             return
 
+        # Students may only hold a socket while the attempt is still live.
+        # Teachers/admins may observe ended sessions for audit.
         self.is_student = bool(getattr(user, "is_student_user", False))
+        if self.is_student:
+            live = await self._attempt_is_live()
+            if not live:
+                await self.close(code=4403)
+                return
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
@@ -54,6 +67,16 @@ class ProctoringConsumer(AsyncJsonWebsocketConsumer):
         if getattr(user, "is_teacher_user", False):
             return attempt.exam.course.teacher.user_id == user.id
         return False
+
+    @database_sync_to_async
+    def _attempt_is_live(self):
+        try:
+            status = ExamAttempt.objects.values_list("status", flat=True).get(
+                pk=self.attempt_id
+            )
+        except ExamAttempt.DoesNotExist:
+            return False
+        return status in self.LIVE_STATUSES
 
     @database_sync_to_async
     def _pause_on_disconnect(self):

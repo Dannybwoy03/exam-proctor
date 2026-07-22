@@ -47,7 +47,8 @@
                     {% if already_redeemed and redeemed_exam %}
                     <a href="{% url 'accounts:dashboard' %}" class="btn btn-primary">Go to Dashboard</a>
                     {% if redeemed_exam.is_published and redeemed_exam.is_available %}
-                    <a href="{% url 'exams:start' redeemed_exam.pk %}" class="btn btn-outline btn-sm">Start Exam</a>
+                    {# formaction reuses the outer form (and its CSRF token); nested forms are invalid HTML #}
+                    <button type="submit" formaction="{% url 'exams:start' redeemed_exam.pk %}" class="btn btn-outline btn-sm">Start Exam</button>
                     {% endif %}
                     {% else %}
                     <button type="submit" class="btn btn-primary">Redeem Code</button>

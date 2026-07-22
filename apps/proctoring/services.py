@@ -1,4 +1,5 @@
 import base64
+import binascii
 from io import BytesIO
 
 from django.conf import settings
@@ -33,14 +34,68 @@ LOCKDOWN_VIOLATIONS = {
     "visibility_hidden": ViolationLog.ViolationType.TAB_SWITCH,
 }
 
+# Short, plain-language guidance shown to the student in the strike alert. Kept
+# imperative ("do this") so the toast reads like a correction, not an accusation.
+STRIKE_MESSAGE_DETAIL = {
+    ViolationLog.ViolationType.FACE_OBSTRUCTED: "do not look away from the screen",
+    ViolationLog.ViolationType.PHONE: "put your phone away",
+    ViolationLog.ViolationType.BOOK: "remove books from view",
+    ViolationLog.ViolationType.NOTES: "remove notes and secondary devices from view",
+    ViolationLog.ViolationType.ABSENT: "stay visible to the camera",
+    ViolationLog.ViolationType.MULTIPLE_FACES: "you must be alone during the exam",
+    ViolationLog.ViolationType.TAB_SWITCH: "stay on the exam tab",
+    ViolationLog.ViolationType.FOCUS_LOST: "keep the exam window focused",
+    ViolationLog.ViolationType.EXIT_FULLSCREEN: "remain in fullscreen",
+}
+
+
+def strike_message(violation_type, strike) -> str:
+    """Build the per-offence alert copy, e.g. 'Strike 1: do not look away from the screen'."""
+    detail = STRIKE_MESSAGE_DETAIL.get(violation_type, "follow the exam rules")
+    return f"Strike {strike}: {detail}"
+
+
+def update_look_away_state(started_at, struck, looking_away, now, threshold_seconds):
+    """Pure state transition for the sustained look-away timer.
+
+    Tracks how long a student has been continuously looking away and decides
+    when that crosses into a strike. Kept side-effect free so it can be unit
+    tested without the ML pipeline or the database.
+
+    Returns ``(started_at, struck, strike_due)``:
+    - ``started_at``  — when the current look-away episode began (None if facing forward).
+    - ``struck``      — whether this episode already produced a strike.
+    - ``strike_due``  — True only on the single frame that crosses the threshold.
+    """
+    if looking_away:
+        if started_at is None:
+            return now, False, False
+        if not struck and (now - started_at).total_seconds() >= threshold_seconds:
+            return started_at, True, True
+        return started_at, struck, False
+    # Facing forward again — reset so the next episode times from scratch.
+    return None, False, False
+
 
 def get_session_for_student(attempt_id, user):
+    # attempt_id arrives from client JSON — a non-numeric value must read as
+    # "not found" (callers already handle DoesNotExist), not a 500.
+    try:
+        attempt_id = int(attempt_id)
+    except (TypeError, ValueError):
+        raise ProctoringSession.DoesNotExist
     return ProctoringSession.objects.select_related("attempt").get(
         attempt_id=attempt_id, attempt__student=user
     )
 
 
-def record_violation(session, violation_type, confidence=1.0, synchronous=False):
+def record_violation(
+    session,
+    violation_type,
+    confidence=1.0,
+    synchronous=False,
+    severity=None,
+):
     """Increment strike count atomically; terminate if over max."""
     cooldown = settings.PROCTORING.get("VIOLATION_COOLDOWN_SECONDS", 10)
     if not synchronous:
@@ -67,6 +122,7 @@ def record_violation(session, violation_type, confidence=1.0, synchronous=False)
             session=session,
             violation_type=violation_type,
             confidence=confidence,
+            severity=severity or ViolationLog.Severity.MEDIUM,
             strike_number=strike,
             action_taken=action,
         )
@@ -80,7 +136,13 @@ def record_violation(session, violation_type, confidence=1.0, synchronous=False)
             attempt.save()
             grade_attempt(attempt)
 
-    return {"log": log, "strike": strike, "action": action, "max_strikes": max_strikes}
+    return {
+        "log": log,
+        "strike": strike,
+        "action": action,
+        "max_strikes": max_strikes,
+        "terminated": action == ViolationLog.ActionTaken.TERMINATE,
+    }
 
 
 def terminate_for_lockdown_violation(session, violation_type, reason):
@@ -126,6 +188,7 @@ def handle_violation(
     confidence=1.0,
     reason=None,
     lockdown_event=False,
+    severity=None,
 ):
     """Single entry point that applies the exam's strictness policy.
 
@@ -148,6 +211,7 @@ def handle_violation(
         violation_type,
         confidence=confidence,
         synchronous=lockdown_event,
+        severity=severity,
     )
 
 
@@ -244,9 +308,16 @@ def invalidate_attempt(attempt, user, *, reason):
 
 
 def decode_frame(frame_base64):
+    """Decode a data-URL or bare base64 frame. Returns b"" on any bad input
+    (None, non-string, invalid base64) so callers never crash on client junk."""
+    if not isinstance(frame_base64, str) or not frame_base64:
+        return b""
     if "," in frame_base64:
         frame_base64 = frame_base64.split(",", 1)[1]
-    return base64.b64decode(frame_base64)
+    try:
+        return base64.b64decode(frame_base64)
+    except (ValueError, binascii.Error):
+        return b""
 
 
 def mock_yolo_detect(frame_bytes):

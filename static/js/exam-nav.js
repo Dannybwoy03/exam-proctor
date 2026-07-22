@@ -2,6 +2,7 @@
     "use strict";
 
     const slides = Array.from(document.querySelectorAll(".question-slide"));
+    if (!slides.length) return; // not an exam page (or questions withheld pre-ID)
     const progressEl = document.getElementById("q-progress");
     const mapCells = Array.from(document.querySelectorAll(".qmap-cell"));
     const answeredCountEl = document.getElementById("qmap-answered-count");

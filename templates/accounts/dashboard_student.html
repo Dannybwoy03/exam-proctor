@@ -13,8 +13,14 @@
 
     <div class="student-grid">
         <div class="student-main">
+            <div class="campus-banner campus-banner--1" role="presentation">
+                <div>
+                    <h2 class="campus-banner-title">Welcome back, {{ user.get_full_name|default:user.username }}</h2>
+                    <p class="campus-banner-sub">Monitored examination environment · AI proctoring active</p>
+                </div>
+            </div>
+
             <div class="portal-card">
-                <h2 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="graduation" size="sm" only %} Welcome back, {{ user.get_full_name|default:user.username }}</h2>
                 <p style="color:var(--color-text-muted);font-size:0.9rem;line-height:1.6;margin:0;">
                     You are entering a monitored examination environment. All sessions are recorded via
                     AI Computer Vision and audio/video proctoring to ensure academic integrity.
@@ -53,7 +59,10 @@
                         {% if item.resume_attempt %}
                         <a href="{% url 'exams:take' item.resume_attempt.pk %}" class="btn btn-primary btn-sm">Continue Exam</a>
                         {% else %}
-                        <a href="{% url 'exams:start' exam.pk %}" class="btn btn-primary btn-sm">Start Exam</a>
+                        <form method="post" action="{% url 'exams:start' exam.pk %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary btn-sm">Start Exam</button>
+                        </form>
                         {% endif %}
                     </div>
                 </div>
@@ -154,9 +163,12 @@
                     {% include "includes/icon.html" with name="play" size="sm" css_class="portal-icon portal-icon--header" only %} CONTINUE EXAM ({{ active_exam.course.code }})
                 </a>
                 {% else %}
-                <a href="{% url 'exams:start' active_exam.pk %}" class="btn-start-exam btn-start-exam-inner">
-                    {% include "includes/icon.html" with name="play" size="sm" css_class="portal-icon portal-icon--header" only %} START ACTIVE EXAM ({{ active_exam.course.code }})
-                </a>
+                <form method="post" action="{% url 'exams:start' active_exam.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-start-exam btn-start-exam-inner">
+                        {% include "includes/icon.html" with name="play" size="sm" css_class="portal-icon portal-icon--header" only %} START ACTIVE EXAM ({{ active_exam.course.code }})
+                    </button>
+                </form>
                 {% endif %}
                 {% else %}
                 <button class="btn-start-exam btn-start-exam-inner" disabled style="opacity:0.5;cursor:not-allowed;">

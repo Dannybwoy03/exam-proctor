@@ -1,6 +1,8 @@
 import json
+import uuid
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.db.models import Count, Prefetch, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,16 +15,23 @@ from apps.accounts.models import User
 from apps.accounts.portal import render_portal
 from apps.exams.models import Exam, ExamAttempt
 
-from .models import ProctoringSession, ViolationLog, ViolationSnapshot
+from .models import (
+    ProctoringSession,
+    ViolationClipFrame,
+    ViolationLog,
+    ViolationSnapshot,
+)
 from .services import (
     LOCKDOWN_VIOLATIONS,
     ReviewPermissionError,
     apply_violation_review,
+    decode_frame,
     get_session_for_student,
     handle_violation,
     integrity_index,
     invalidate_attempt,
     risk_level,
+    strike_message,
 )
 from .tasks import process_proctor_frame, push_ws, verify_id_card
 
@@ -35,13 +44,51 @@ def _parse_json_body(request):
         return None, JsonResponse({"error": "Malformed JSON body."}, status=400)
 
 
-@role_required(User.Role.TEACHER)
+def _client_id_verification_status(session):
+    """Map session state to the status the exam client expects.
+
+    After a failed face check with attempts remaining, the DB status stays
+    ``pending`` (so the student can retry). The client needs an explicit
+    ``retry`` signal to show the Retry button instead of keeping the spinner.
+    """
+    status = session.id_verification_status
+    if status != ProctoringSession.IDVerificationStatus.PENDING:
+        return status
+    max_attempts = settings.PROCTORING.get("MAX_ID_VERIFICATION_ATTEMPTS", 2)
+    if session.id_verification_attempts >= max_attempts:
+        return status
+    last = session.id_attempts.order_by("-pk").first()
+    if last and last.status == last.Status.FAILED:
+        return "retry"
+    return status
+
+
+def _validate_frame(frame_b64):
+    """Reject junk before it reaches Redis/Celery. Returns an error response or None."""
+    if not isinstance(frame_b64, str) or not frame_b64:
+        return JsonResponse({"error": "Missing webcam frame."}, status=400)
+    max_bytes = settings.PROCTORING.get("MAX_FRAME_BYTES", 1_500_000)
+    # base64 inflates by ~4/3, so this bounds the decoded size without decoding.
+    if len(frame_b64) > (max_bytes * 4) // 3 + 4:
+        return JsonResponse({"error": "Frame too large."}, status=400)
+    if not decode_frame(frame_b64):
+        return JsonResponse({"error": "Frame is not valid base64 image data."}, status=400)
+    return None
+
+
+@role_required(User.Role.TEACHER, User.Role.ADMIN)
 def flagged_sessions(request):
-    # Flagged-session review is a teacher-only responsibility. Admins manage
-    # accounts and approvals; they don't audit live exam integrity.
-    sessions_qs = ProctoringSession.objects.filter(
-        attempt__exam__course__teacher__user=request.user
-    )
+    audit_readonly = request.user.is_admin_user
+    if audit_readonly:
+        sessions_qs = ProctoringSession.objects.all()
+        portal_nav = "proctoring_audit"
+        page_title = "Proctoring Audit"
+    else:
+        sessions_qs = ProctoringSession.objects.filter(
+            attempt__exam__course__teacher__user=request.user
+        )
+        portal_nav = "flagged"
+        page_title = "Flagged Sessions"
 
     flagged = (
         sessions_qs.filter(strike_count__gt=0)
@@ -76,7 +123,7 @@ def flagged_sessions(request):
             }
         )
 
-    if selected_id:
+    if selected_id and str(selected_id).isdigit():
         selected = get_object_or_404(flagged, pk=selected_id)
     elif flagged.exists():
         selected = flagged.first()
@@ -84,16 +131,36 @@ def flagged_sessions(request):
     timeline = []
     logs = []
     snapshots = []
+    clip_frames_by_violation = {}
     if selected:
-        timeline = selected.violations.order_by("created_at")
+        # Per-strike clip frames (the lead-up burst the browser uploaded),
+        # grouped by violation so each snapshot/row can expose its sequence.
+        for clip_frame in (
+            ViolationClipFrame.objects.filter(violation__session=selected)
+            .order_by("violation__created_at", "sequence")
+        ):
+            clip_frames_by_violation.setdefault(clip_frame.violation_id, []).append(
+                clip_frame.image.url
+            )
+
+        timeline = list(
+            selected.violations.select_related("snapshot").order_by("created_at")
+        )
         for v in timeline:
+            v.clip_frame_urls = clip_frames_by_violation.get(v.pk, [])
             logs.append(
                 f"[{v.created_at.strftime('%H:%M:%S')}] OBJ_DETECT: {v.violation_type.upper()} "
                 f"(confidence: {v.confidence:.2f})"
             )
-        snapshots = ViolationSnapshot.objects.filter(
-            violation__session=selected
-        ).select_related("violation")
+        snapshots = list(
+            ViolationSnapshot.objects.filter(violation__session=selected)
+            .select_related("violation")
+            .order_by("violation__created_at")
+        )
+        for snap in snapshots:
+            snap.clip_frame_urls = clip_frames_by_violation.get(snap.violation_id, [])
+
+    snapshot_by_violation = {s.violation_id: s for s in snapshots}
 
     return render_portal(
         request,
@@ -105,12 +172,14 @@ def flagged_sessions(request):
             "timeline": timeline,
             "logs": logs,
             "snapshots": snapshots,
-            "portal_nav": "flagged",
+            "snapshot_by_violation": snapshot_by_violation,
+            "audit_readonly": audit_readonly,
+            "portal_nav": portal_nav,
             "active_count": flagged.filter(
                 attempt__status=ExamAttempt.Status.IN_PROGRESS
             ).count(),
         },
-        page_title="Flagged Sessions",
+        page_title=page_title,
     )
 
 
@@ -139,19 +208,54 @@ def id_verify(request):
         return err
     attempt_id = data.get("attempt_id")
     frame_b64 = data.get("frame_base64", "")
-    # Cheap existence + ownership check (avoids loading the whole row when we
-    # only need to gate access before queueing the verification task).
-    if not ProctoringSession.objects.filter(
-        attempt_id=attempt_id, attempt__student=request.user
-    ).exists():
+    if frame_err := _validate_frame(frame_b64):
+        return frame_err
+    try:
+        session = get_session_for_student(attempt_id, request.user)
+    except ProctoringSession.DoesNotExist:
         return JsonResponse({"error": "Proctoring session not found."}, status=404)
+
+    attempt = session.attempt
+    if attempt.status != ExamAttempt.Status.PENDING_ID:
+        return JsonResponse(
+            {
+                "error": "Identity verification is only allowed before the exam starts.",
+                "attempt_status": attempt.status,
+                "id_verification_status": _client_id_verification_status(session),
+            },
+            status=409,
+        )
+    if session.id_verification_status == ProctoringSession.IDVerificationStatus.FAILED:
+        return JsonResponse(
+            {
+                "error": "Identity verification already failed for this attempt.",
+                "id_verification_status": "failed",
+                "attempt_status": attempt.status,
+            },
+            status=409,
+        )
+
+    # Run inline when Celery eager so the client gets a result immediately
+    # instead of waiting on a worker queue that may not be running.
+    if settings.CELERY_TASK_ALWAYS_EAGER:
+        verify_id_card(attempt_id, frame_b64)
+        session.refresh_from_db()
+        return JsonResponse(
+            {
+                "accepted": True,
+                "id_verification_status": _client_id_verification_status(session),
+                "attempt_status": session.attempt.status,
+                "id_verification_attempts": session.id_verification_attempts,
+            }
+        )
+
     verify_id_card.delay(attempt_id, frame_b64)
-    return JsonResponse({"accepted": True})
+    return JsonResponse({"accepted": True, "queued": True})
 
 
 @require_POST
 @role_required(User.Role.STUDENT)
-@ratelimit(key=_attempt_id_key, rate="20/m", method="POST", block=True)
+@ratelimit(key=_attempt_id_key, rate="120/m", method="POST", block=True)  # ~2 req / s per attempt
 def process_frame(request):
     data, err = _parse_json_body(request)
     if err:
@@ -159,6 +263,10 @@ def process_frame(request):
     attempt_id = data.get("attempt_id")
     frame_b64 = data.get("frame_base64", "")
     client_events = data.get("client_events", [])
+    if not isinstance(client_events, list):
+        client_events = []
+    if frame_err := _validate_frame(frame_b64):
+        return frame_err
 
     try:
         session = get_session_for_student(attempt_id, request.user)
@@ -168,6 +276,8 @@ def process_frame(request):
         return JsonResponse({"error": "Exam not in progress"}, status=400)
 
     for event in client_events:
+        if not isinstance(event, dict):
+            continue
         vtype = LOCKDOWN_VIOLATIONS.get(event.get("type"))
         if vtype:
             result = handle_violation(session, vtype, lockdown_event=True)
@@ -180,6 +290,8 @@ def process_frame(request):
                         "max_strikes": result["max_strikes"],
                         "violation_type": vtype,
                         "action": result["action"],
+                        "violation_id": result["log"].pk,
+                        "message": strike_message(vtype, result["strike"]),
                     },
                 )
                 if result.get("terminated") or (
@@ -203,6 +315,7 @@ def process_frame(request):
 
 @require_POST
 @role_required(User.Role.STUDENT)
+@ratelimit(key=_attempt_id_key, rate="60/m", method="POST", block=True)
 def client_event(request):
     data, err = _parse_json_body(request)
     if err:
@@ -237,6 +350,7 @@ def client_event(request):
     terminated = bool(result.get("terminated")) or (
         result.get("action") == ViolationLog.ActionTaken.TERMINATE
     )
+    violation_id = result["log"].pk
     push_ws(
         attempt_id,
         {
@@ -246,6 +360,8 @@ def client_event(request):
             "violation_type": vtype,
             "action": result["action"],
             "reason": reason_label,
+            "violation_id": violation_id,
+            "message": strike_message(vtype, result["strike"]),
         },
     )
     if terminated:
@@ -258,6 +374,9 @@ def client_event(request):
             "max_strikes": result["max_strikes"],
             "reason": reason_label,
             "strikes": session.strike_count,
+            "violation_id": violation_id,
+            "message": strike_message(vtype, result["strike"]),
+            "action": result["action"],
         }
     )
 
@@ -281,6 +400,11 @@ def dispute_latest_violation(request):
     except ProctoringSession.DoesNotExist:
         return JsonResponse({"error": "Proctoring session not found."}, status=404)
 
+    if session.attempt.status != ExamAttempt.Status.IN_PROGRESS:
+        return JsonResponse(
+            {"disputed": False, "reason": "Attempt is not in progress."}, status=409
+        )
+
     violation = (
         session.violations.filter(is_disputed=False).order_by("-created_at").first()
     )
@@ -300,21 +424,113 @@ def dispute_latest_violation(request):
     )
 
 
+def _student_violation_or_none(attempt_id, violation_id, user, *, require_in_progress=True):
+    """Resolve a ViolationLog the student owns, or (None, error_response)."""
+    try:
+        session = get_session_for_student(attempt_id, user)
+    except ProctoringSession.DoesNotExist:
+        return None, JsonResponse(
+            {"error": "Proctoring session not found."}, status=404
+        )
+    if require_in_progress and session.attempt.status != ExamAttempt.Status.IN_PROGRESS:
+        return None, JsonResponse(
+            {"error": "Attempt is not in progress."}, status=409
+        )
+    if not str(violation_id).isdigit():
+        return None, JsonResponse({"error": "Violation not found."}, status=404)
+    violation = ViolationLog.objects.filter(pk=violation_id, session=session).first()
+    if violation is None:
+        return None, JsonResponse({"error": "Violation not found."}, status=404)
+    return violation, None
+
+
+@require_POST
+@role_required(User.Role.STUDENT)
+@ratelimit(key=_attempt_id_key, rate="30/m", method="POST", block=True)
+def violation_clip(request):
+    """Store the short burst of frames the browser buffered around a strike.
+
+    These are the raw lead-up frames (the "clip") a teacher reviews. Idempotent:
+    a second upload for a violation that already has frames is ignored, so a
+    flaky network retry can't double-store.
+    """
+    data, err = _parse_json_body(request)
+    if err:
+        return err
+    violation, err = _student_violation_or_none(
+        data.get("attempt_id"), data.get("violation_id"), request.user
+    )
+    if err:
+        return err
+    if violation.clip_frames.exists():
+        return JsonResponse({"saved": 0, "skipped": True})
+
+    frames = data.get("frames") or []
+    if not isinstance(frames, list):
+        return JsonResponse({"error": "frames must be a list."}, status=400)
+    max_frames = settings.PROCTORING.get("CLIP_FRAME_COUNT", 6)
+    max_bytes = settings.PROCTORING.get("CLIP_MAX_FRAME_BYTES", 300_000)
+    saved = 0
+    for index, frame_b64 in enumerate(frames[:max_frames]):
+        try:
+            frame_bytes = decode_frame(frame_b64)
+        except (ValueError, TypeError):
+            continue
+        if not frame_bytes or len(frame_bytes) > max_bytes:
+            continue
+        clip_frame = ViolationClipFrame(violation=violation, sequence=index)
+        clip_frame.image.save(
+            f"clip_{violation.pk}_{index}_{uuid.uuid4().hex[:6]}.jpg",
+            ContentFile(frame_bytes),
+            save=True,
+        )
+        saved += 1
+    return JsonResponse({"saved": saved})
+
+
+@require_POST
+@role_required(User.Role.STUDENT)
+@ratelimit(key=_attempt_id_key, rate="30/m", method="POST", block=True)
+def acknowledge_violation(request):
+    """Record that the student saw and acknowledged the strike alert."""
+    data, err = _parse_json_body(request)
+    if err:
+        return err
+    violation, err = _student_violation_or_none(
+        data.get("attempt_id"), data.get("violation_id"), request.user
+    )
+    if err:
+        return err
+    if violation.acknowledged_at is None:
+        violation.acknowledged_at = timezone.now()
+        violation.save(update_fields=["acknowledged_at"])
+    return JsonResponse({"acknowledged": True, "violation_id": violation.pk})
+
+
 @role_required(User.Role.STUDENT)
 def session_status(request, attempt_id):
     try:
         session = get_session_for_student(attempt_id, request.user)
     except ProctoringSession.DoesNotExist:
         return JsonResponse({"error": "Proctoring session not found."}, status=404)
-    violations = list(
-        session.violations.values("violation_type", "strike_number", "created_at")
-    )
+    violations_qs = session.violations.order_by("created_at")
+    violations = [
+        {
+            "id": v.pk,
+            "violation_type": v.violation_type,
+            "strike_number": v.strike_number,
+            "created_at": v.created_at.isoformat(),
+            "message": strike_message(v.violation_type, v.strike_number),
+        }
+        for v in violations_qs
+    ]
     attempt = session.attempt
     return JsonResponse(
         {
             "strike_count": session.strike_count,
             "max_strikes": session.max_strikes,
-            "id_verification_status": session.id_verification_status,
+            "id_verification_status": _client_id_verification_status(session),
+            "id_verification_attempts": session.id_verification_attempts,
             "violations": violations,
             "attempt_status": attempt.status,
             "remaining_seconds": attempt.computed_remaining_seconds,

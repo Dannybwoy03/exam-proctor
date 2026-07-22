@@ -89,7 +89,6 @@ AUTH_USER_MODEL = "accounts.User"
 
 AUTHENTICATION_BACKENDS = [
     "apps.accounts.backends.EmailOrUsernameBackend",
-    "django.contrib.auth.backends.ModelBackend",
 ]
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -167,18 +166,106 @@ else:
     # check` stays green. The production branch above uses RedisCache.
     SILENCED_SYSTEM_CHECKS = ["django_ratelimit.E003", "django_ratelimit.W001"]
 
-CELERY_TASK_ROUTES = {
-    "apps.proctoring.tasks.process_proctor_frame": {"queue": "yolo_inference"},
-    "apps.proctoring.tasks.verify_id_card": {"queue": "id_verification"},
-}
+if USE_REDIS:
+    CELERY_TASK_ROUTES = {
+        "apps.proctoring.tasks.process_proctor_frame": {"queue": "yolo_inference"},
+        "apps.proctoring.tasks.verify_id_card": {"queue": "id_verification"},
+    }
+else:
+    CELERY_TASK_ROUTES = {}
+
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 
+def _env_number(name, default, cast, min_value, max_value):
+    """Parse a numeric env var defensively: bad values fall back to the default
+    (with a loud warning) and valid values are clamped into [min, max], so a
+    typo'd .env can't crash boot or set an unsafe threshold."""
+    import logging
+
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = cast(raw)
+    except (TypeError, ValueError):
+        logging.getLogger(__name__).warning(
+            "Ignoring invalid %s=%r; using default %s", name, raw, default
+        )
+        return default
+    clamped = max(min_value, min(max_value, value))
+    if clamped != value:
+        logging.getLogger(__name__).warning(
+            "%s=%s out of range [%s, %s]; clamped to %s",
+            name, value, min_value, max_value, clamped,
+        )
+    return clamped
+
+
+def _env_int(name, default, min_value=1, max_value=1_000_000_000):
+    return _env_number(name, default, int, min_value, max_value)
+
+
+def _env_float(name, default, min_value=0.0, max_value=1.0):
+    return _env_number(name, default, float, min_value, max_value)
+
+
 PROCTORING = {
-    "MAX_STRIKES": 3,
-    "FRAME_INTERVAL_SECONDS": 3,
+    "MAX_STRIKES": 5,
+    # Default 1s capture: phone/book strikes are single-frame (no sustained timer),
+    # so a shorter interval shrinks the blind window. Look-away uses wall-clock
+    # time in the task layer, not frame count. Override via PROCTORING_FRAME_INTERVAL.
+    "FRAME_INTERVAL_SECONDS": _env_int("PROCTORING_FRAME_INTERVAL", 1, 1, 60),
+    # Continuous seconds a student must look away (head turn or iris gaze
+    # off-screen) before it counts as a strike. Brief 2-3s glances are
+    # tolerated; the episode timer resets the moment they look back.
+    "LOOK_AWAY_SECONDS": _env_float("PROCTORING_LOOK_AWAY_SECONDS", 5.5, 1.0, 300.0),
+    # Per-strike "clip": how many buffered frames the browser uploads, how often
+    # it samples them, and the max accepted size of each frame.
+    "CLIP_FRAME_COUNT": _env_int("PROCTORING_CLIP_FRAME_COUNT", 6, 1, 30),
+    "CLIP_BUFFER_INTERVAL_MS": _env_int("PROCTORING_CLIP_BUFFER_INTERVAL_MS", 1000, 100, 10_000),
+    "CLIP_MAX_FRAME_BYTES": _env_int("PROCTORING_CLIP_MAX_FRAME_BYTES", 300_000, 10_000, 10_000_000),
+    # Max accepted size of a single live/ID-verify webcam frame (decoded bytes).
+    "MAX_FRAME_BYTES": _env_int("PROCTORING_MAX_FRAME_BYTES", 1_500_000, 100_000, 20_000_000),
     "DISCONNECT_GRACE_SECONDS": 120,
     "ID_CONFIDENCE_THRESHOLD": 0.85,
-    "FACE_MATCH_THRESHOLD": 0.75,
-    "MAX_ID_VERIFICATION_ATTEMPTS": 3,
+    # ArcFace cosine similarity (ml/face_id). Same-person pairs typically
+    # score >= 0.5, different people < 0.2; 0.35 balances impostor rejection
+    # against webcam lighting/angle variance.
+    "FACE_ID_MATCH_THRESHOLD": _env_float("PROCTORING_FACE_ID_MATCH_THRESHOLD", 0.35, 0.05, 0.95),
+    # Two tries: the automatic first frame, then one student-triggered retry.
+    # A second failure permanently fails ID verification for the attempt.
+    "MAX_ID_VERIFICATION_ATTEMPTS": 2,
     "VIOLATION_COOLDOWN_SECONDS": 10,
+    # ML pipeline (Phase 3). Set USE_MOCK_ML=true to skip Torch/Ultralytics locally.
+    "USE_MOCK_ML": os.getenv("PROCTORING_USE_MOCK_ML", "false").lower() == "true",
+    "YOLO_WEIGHTS": os.getenv("PROCTORING_YOLO_WEIGHTS", "yolov5nu.pt"),
+    "POSE_WEIGHTS": os.getenv("PROCTORING_POSE_WEIGHTS", "yolov8n-pose.pt"),
+    "YOLO_CONFIDENCE": _env_float("PROCTORING_YOLO_CONFIDENCE", 0.40, 0.05, 0.99),
+    "POSE_CONFIDENCE": _env_float("PROCTORING_POSE_CONFIDENCE", 0.50, 0.05, 0.99),
+    "YOLO_IMG_SIZE": _env_int("PROCTORING_YOLO_IMG_SIZE", 416, 160, 1920),
+    # COCO ids YOLOv5 may report. Violation-bearing: phone(67), book(73),
+    # laptop(63)/keyboard(66) (notes when near a person). Contextual/benign,
+    # detected for audit + hard-negative training but no strike: tv(62),
+    # mouse(64), remote(65). See ml/yolo_service/detector.py COCO_NAMES.
+    "YOLO_CLASSES": [0, 62, 63, 64, 65, 66, 67, 73],
+    "ABSENT_CONSECUTIVE_FRAMES": _env_int("PROCTORING_ABSENT_FRAMES", 2, 1, 60),
+    "MULTIPLE_PERSON_MIN": 2,
+    # Consecutive frames that must show 2+ persons before a multiple-person
+    # strike fires. Damps single-frame false positives (e.g. a raised phone
+    # splitting one body into two YOLO person boxes).
+    "MULTIPLE_PERSON_CONSECUTIVE_FRAMES": _env_int("PROCTORING_MULTI_PERSON_FRAMES", 2, 1, 60),
+    "HEAD_TURN_NOSE_OFFSET_RATIO": _env_float("PROCTORING_HEAD_TURN_RATIO", 0.15, 0.01, 1.0),
+    # Iris gaze (MediaPipe FaceMesh, ml/gaze_service). Detects eyes tracking
+    # off-screen while the head stays forward; fused with the pose head-turn
+    # signal into the same sustained LOOK_AWAY_SECONDS rule. Ratios: ~0.5 is a
+    # centered gaze; horizontal outside [MIN, MAX] or vertical above V_MAX
+    # counts as off-screen. Tune with the ml/lab tool before tightening.
+    "USE_IRIS_GAZE": os.getenv("PROCTORING_USE_IRIS_GAZE", "true").lower() == "true",
+    "FACE_LANDMARKER_MODEL": os.getenv(
+        "PROCTORING_FACE_LANDMARKER_MODEL", "face_landmarker.task"
+    ),
+    "IRIS_H_RATIO_MIN": _env_float("PROCTORING_IRIS_H_RATIO_MIN", 0.25, 0.0, 0.5),
+    "IRIS_H_RATIO_MAX": _env_float("PROCTORING_IRIS_H_RATIO_MAX", 0.75, 0.5, 1.0),
+    "IRIS_V_RATIO_MAX": _env_float("PROCTORING_IRIS_V_RATIO_MAX", 0.80, 0.5, 1.5),
+    "SNAPSHOT_JPEG_QUALITY": 72,
 }

@@ -19,19 +19,36 @@
     --color-risk-high: #e11d48;
     --color-risk-med: #f97316;
 
-    --color-bg: #f3f4f6;
+    /* Soft green-tinted canvas so white cards float on brand gradient */
+    --color-bg: #e8f2ed;
+
+    /* Green canvas gradient — decoration lives in the outer corners only, so
+       the area behind content stays near-white (WCAG: text contrast is never
+       degraded by the backdrop). Blob alpha halved from the first pass. */
+    --gradient-canvas:
+        radial-gradient(ellipse 46% 38% at 100% 0%, rgba(13, 79, 60, 0.12) 0%, transparent 62%),
+        radial-gradient(ellipse 42% 34% at 100% 100%, rgba(22, 163, 74, 0.1) 0%, transparent 58%),
+        radial-gradient(ellipse 40% 32% at 0% 100%, rgba(13, 79, 60, 0.07) 0%, transparent 58%),
+        linear-gradient(118deg, #ffffff 0%, #f7fbf9 40%, #f0f7f3 72%, #eaf3ee 100%);
     --color-surface: #ffffff;
     --color-text: #111827;
-    --color-text-muted: #6b7280;
-    --color-border: #e5e7eb;
-    --color-border-light: #f3f4f6;
+    /* 4.5:1+ on white and on the near-white card surfaces */
+    --color-text-muted: #5a6472;
+    --color-border: #dde3ea;
+    --color-border-light: #eceff3;
+    --gradient-glass: rgba(255, 255, 255, 0.8);
+    --gradient-glass-border: rgba(255, 255, 255, 0.85);
+    --gradient-glass-blur: 14px;
+    /* Content surfaces: effectively opaque so text always reads on white */
+    --surface-solid: rgba(255, 255, 255, 0.96);
 
     --font-family: "Inter", system-ui, -apple-system, sans-serif;
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --radius-xl: 18px;
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-    --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
-    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.1);
+    --radius-sm: 10px;
+    --radius-md: 14px;
+    --radius-lg: 18px;
+    --radius-xl: 24px;
+    --radius-pill: 999px;
+    --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.04), 0 4px 16px rgba(17, 24, 39, 0.05);
+    --shadow-md: 0 2px 6px rgba(17, 24, 39, 0.05), 0 10px 30px rgba(17, 24, 39, 0.08);
+    --shadow-lg: 0 8px 40px rgba(17, 24, 39, 0.14);
 }

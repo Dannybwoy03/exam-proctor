@@ -9,6 +9,13 @@ from config import error_views
 
 urlpatterns = [
     path("", include("apps.accounts.urls")),
+    # Must precede the admin mount: contrib.admin's catch_all_view swallows
+    # every admin/* URL, so routes under that prefix registered later 404.
+    path(
+        "admin/proctoring-audit/",
+        proctoring_views.flagged_sessions,
+        name="admin_proctoring_audit",
+    ),
     path("admin/", admin.site.urls),
     path("courses/", include("apps.courses.urls")),
     path("exams/", include("apps.exams.urls")),
