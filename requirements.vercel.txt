@@ -1,0 +1,8 @@
+Django>=4.2
+djangorestframework>=3.14
+channels>=4.0
+python-dotenv>=1.0
+gunicorn>=20.1
+whitenoise>=6.5
+Pillow>=10.0
+# Exclude heavy ML packages (torch, ultralytics, mediapipe, insightface, onnxruntime)
