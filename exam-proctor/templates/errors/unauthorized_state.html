@@ -1,0 +1,39 @@
+{# Unauthorized / forbidden empty state — converted from React EmptyState + MultiIconDisplay. #}
+<div class="unauthorized-page">
+    <div class="unauthorized-wrap">
+        <section class="unauthorized-card unauthorized-card--{{ variant|default:'error' }}"
+                 role="region"
+                 aria-labelledby="unauthorized-title">
+            <div class="unauthorized-card-bg" aria-hidden="true"></div>
+
+            <div class="unauthorized-icons" aria-hidden="true">
+                <div class="unauthorized-icon-tile unauthorized-icon-tile--left">
+                    {% include "includes/icon.html" with name=left_icon|default:"shield" size="md" only %}
+                </div>
+                <div class="unauthorized-icon-tile unauthorized-icon-tile--center">
+                    {% include "includes/icon.html" with name=center_icon|default:"lock" size="md" only %}
+                </div>
+                <div class="unauthorized-icon-tile unauthorized-icon-tile--right">
+                    {% include "includes/icon.html" with name=right_icon|default:"warning" size="md" only %}
+                </div>
+            </div>
+
+            <div class="unauthorized-content">
+                <h1 id="unauthorized-title" class="unauthorized-title">{{ title }}</h1>
+                {% if description %}
+                <p class="unauthorized-desc">{{ description|safe }}</p>
+                {% endif %}
+            </div>
+
+            <div class="unauthorized-actions">
+                <button type="button" class="unauthorized-back-btn" onclick="window.history.back();">
+                    {{ back_label|default:"Go Back" }}
+                </button>
+            </div>
+        </section>
+
+        <p class="unauthorized-home-link">
+            <a href="{{ home_url }}">Return to Home</a>
+        </p>
+    </div>
+</div>

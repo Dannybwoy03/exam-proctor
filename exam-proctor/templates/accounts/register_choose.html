@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Register — Exam Proctor{% endblock %}
+{% block body %}
+<div class="auth-layout">
+    <div class="auth-card">
+        <div class="auth-card-header">
+            <div class="portal-logo auth-logo">E</div>
+            <h1 class="auth-title">Create an account</h1>
+            <p class="auth-subtitle">Choose how you will use the exam portal</p>
+        </div>
+
+        <div class="auth-role-cards">
+            <a href="{% url 'accounts:register_student' %}" class="auth-role-card">
+                {% include "includes/icon.html" with name="graduation" size="md" only %}
+                <strong>Register as Student</strong>
+                <span>Index number, programme, and student ID verification</span>
+            </a>
+            <a href="{% url 'accounts:register_teacher' %}" class="auth-role-card">
+                {% include "includes/icon.html" with name="user" size="md" only %}
+                <strong>Register as Teacher</strong>
+                <span>Staff ID, department, and admin approval</span>
+            </a>
+        </div>
+
+        <p class="auth-footer">
+            Already have an account? <a href="{% url 'accounts:login' %}">Login</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Exam Questions — {{ exam.title }}{% endblock %}
+{% block body %}
+{% include "includes/portal_header.html" with portal_breadcrumb="EXAM QUESTIONS" %}
+<div class="portal-layout">
+    {% include "includes/portal_sidebar.html" %}
+    <main class="portal-main">
+        <div class="faculty-page-header">
+            <div>
+                <h2 class="faculty-page-title">Exam Questions</h2>
+                <p class="faculty-page-sub">{{ exam.title }} · {{ exam.course.code }} · {{ exam_question_rows|length }} in exam</p>
+            </div>
+            <div class="faculty-list-actions">
+                <a href="{% url 'exams:exam_preview' exam.pk %}" class="btn btn-outline btn-sm">Preview</a>
+                <a href="{% url 'exams:detail' exam.pk %}" class="btn btn-primary btn-sm">Exam Settings →</a>
+            </div>
+        </div>
+
+        {% if messages %}
+        <ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+        {% endif %}
+
+        <div class="portal-card">
+            <h3 class="portal-card-title">Questions in this exam</h3>
+            {% if exam_question_rows %}
+            {% for eq in exam_question_rows %}
+            <form id="remove-form-{{ eq.pk }}" method="post" hidden>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove">
+                <input type="hidden" name="exam_question_id" value="{{ eq.pk }}">
+            </form>
+            {% endfor %}
+            <form method="post" id="reorder-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="reorder">
+                <input type="hidden" name="order" id="order-input" value="">
+                <ul class="exam-question-order-list" id="exam-question-list">
+                    {% for eq in exam_question_rows %}
+                    <li class="exam-question-order-item" data-id="{{ eq.pk }}" draggable="true">
+                        <span class="drag-handle">⋮⋮</span>
+                        <span class="question-type-badge">{{ eq.question.get_question_type_display }}</span>
+                        <span class="exam-question-order-text">{{ eq.question.text|truncatewords:18 }}</span>
+                        <span class="exam-question-order-marks">{{ eq.marks_override|default:eq.question.marks }} pts</span>
+                        <button type="submit" form="remove-form-{{ eq.pk }}" class="btn btn-danger-outline btn-xs" onclick="return confirm('Remove this question from the exam?');">Remove</button>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <button type="submit" class="btn btn-outline btn-sm" style="margin-top:1rem;">Save Order</button>
+            </form>
+            {% else %}
+            <p class="admin-empty">No questions attached yet. Add from your course question banks below.</p>
+            {% endif %}
+        </div>
+
+        <div class="portal-card">
+            <h3 class="portal-card-title">Add from question banks</h3>
+            {% if banks %}
+            <p class="faculty-page-sub" style="margin:0 0 1rem;">
+                Banks for {{ exam.course.code }}:
+                {% for b in banks %}{{ b.title }} ({{ b.question_count }}){% if not forloop.last %} · {% endif %}{% endfor %}
+            </p>
+            {% endif %}
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add">
+                <div class="question-picker-list">
+                    {% for value, label in add_form.fields.question_ids.choices %}
+                    <label class="question-picker-item">
+                        <input type="checkbox" name="question_ids" value="{{ value }}">
+                        <span>{{ label }}</span>
+                    </label>
+                    {% empty %}
+                    <p class="admin-empty">All bank questions are already in this exam, or no banks exist for this course.</p>
+                    {% endfor %}
+                </div>
+                {% if add_form.fields.question_ids.choices %}
+                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:1rem;">Add Selected</button>
+                {% else %}
+                <a href="{% url 'exams:question_bank_create' %}" class="btn btn-outline btn-sm" style="margin-top:1rem;">Create Question Bank</a>
+                {% endif %}
+            </form>
+        </div>
+    </main>
+</div>
+<script>
+(function () {
+    const list = document.getElementById("exam-question-list");
+    const orderInput = document.getElementById("order-input");
+    const form = document.getElementById("reorder-form");
+    if (!list || !orderInput || !form) return;
+
+    let dragEl = null;
+    list.querySelectorAll(".exam-question-order-item").forEach((item) => {
+        item.addEventListener("dragstart", () => { dragEl = item; item.classList.add("dragging"); });
+        item.addEventListener("dragend", () => { item.classList.remove("dragging"); dragEl = null; updateOrder(); });
+        item.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            if (!dragEl) return;
+            const siblings = [...list.querySelectorAll(".exam-question-order-item:not(.dragging)")];
+            const after = siblings.find((el) => e.clientY <= el.getBoundingClientRect().top + el.offsetHeight / 2);
+            if (after) list.insertBefore(dragEl, after);
+            else list.appendChild(dragEl);
+        });
+    });
+
+    function updateOrder() {
+        orderInput.value = [...list.querySelectorAll(".exam-question-order-item")]
+            .map((el) => el.dataset.id).join(",");
+    }
+    updateOrder();
+    form.addEventListener("submit", updateOrder);
+})();
+</script>
+{% endblock %}

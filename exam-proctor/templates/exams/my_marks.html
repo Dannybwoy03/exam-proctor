@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}My Marks — Exam Proctor{% endblock %}
+{% block body %}
+{% include "includes/portal_header_student.html" with student_nav_marks="active" %}
+<div class="portal-page">
+    <div style="max-width:900px;margin:0 auto;">
+
+        <h2 class="student-subpage-title" style="margin-bottom:1.25rem;">My Marks</h2>
+
+        <div class="portal-card" style="padding:0;overflow:hidden;">
+            <table class="data-table" style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="background:var(--color-bg);">
+                        <th class="data-th">Exam</th>
+                        <th class="data-th">Date</th>
+                        <th class="data-th">Score</th>
+                        <th class="data-th">Status</th>
+                        <th class="data-th"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in attempts %}
+                    <tr class="data-row">
+                        <td class="data-td">{{ a.exam.title }}</td>
+                        <td class="data-td">{{ a.started_at|date:"M d, Y" }}</td>
+                        <td class="data-td">{% if a.score is not None %}{{ a.score }}{% else %}—{% endif %}</td>
+                        <td class="data-td">{{ a.get_grading_status_display }}</td>
+                        <td class="data-td">
+                            <a href="{% url 'exams:result' a.pk %}" class="btn btn-outline btn-sm">View</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="data-td" style="text-align:center;color:var(--color-text-muted);padding:2rem;">
+                            No completed exams yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

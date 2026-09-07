@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Administrator sign in — Exam Proctor{% endblock %}
+{% block extra_head %}
+<meta name="robots" content="noindex, nofollow">
+{% endblock %}
+{% block body %}
+<div class="auth-layout">
+    <div class="auth-card">
+        <div class="auth-card-header">
+            <div class="portal-logo auth-logo">
+                {% include "includes/icon.html" with name="shield" size="md" only %}
+            </div>
+            <h1 class="auth-title">Administrator portal</h1>
+            <p class="auth-subtitle">Approve teachers, review exams, and oversee proctoring</p>
+        </div>
+
+        {% include "accounts/_login_form.html" %}
+
+        <p class="auth-footer auth-footer--muted">
+            Not an administrator?
+            <a href="{% url 'accounts:login' %}">Use a different portal</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

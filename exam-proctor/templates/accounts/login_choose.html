@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Sign in — Exam Proctor{% endblock %}
+{% block body %}
+<div class="auth-layout">
+    <div class="auth-card">
+        <div class="auth-card-header">
+            <div class="portal-logo auth-logo">E</div>
+            <h1 class="auth-title">Sign in to your portal</h1>
+            <p class="auth-subtitle">Choose the portal that matches your role</p>
+        </div>
+
+        {% if messages %}
+        {% for message in messages %}
+        <div class="portal-notice-card portal-notice-card--compact auth-feedback-notice" role="status">
+            {% include "includes/icon.html" with name="shield" size="sm" only %}
+            <div class="portal-notice-content">
+                <p class="portal-notice-body"><strong>{{ message }}</strong></p>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        <div class="auth-role-cards">
+            <a href="{% url 'accounts:login_student' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}" class="auth-role-card">
+                {% include "includes/icon.html" with name="graduation" size="md" only %}
+                <strong>Student</strong>
+                <span>Take exams, view results, manage your access codes</span>
+            </a>
+            <a href="{% url 'accounts:login_teacher' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}" class="auth-role-card">
+                {% include "includes/icon.html" with name="user" size="md" only %}
+                <strong>Teacher</strong>
+                <span>Build question banks, run exams, review answers</span>
+            </a>
+        </div>
+
+        <p class="auth-footer">
+            New here?
+            <a href="{% url 'accounts:register' %}">Create an account</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

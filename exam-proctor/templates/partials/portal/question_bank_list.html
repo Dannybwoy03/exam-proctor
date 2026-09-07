@@ -1,0 +1,36 @@
+<div class="portal-page" data-portal-nav="banks" data-portal-title="Question Banks">
+<div class="faculty-page-header">
+    <div>
+        <h2 class="faculty-page-title">Question Banks</h2>
+        <p class="faculty-page-sub">Build reusable question pools per course before assembling exams.</p>
+    </div>
+    <a href="{% url 'exams:question_bank_create' %}" class="btn btn-primary btn-sm" data-portal-full>+ New Question Bank</a>
+</div>
+
+{% if messages %}
+<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% for b in banks %}
+<div class="portal-card faculty-list-card">
+    <div class="faculty-list-row">
+        <div>
+            <div class="faculty-list-title">{{ b.title }}</div>
+            <div class="faculty-list-meta">{{ b.course.code }} · {{ b.question_count }} question{{ b.question_count|pluralize }}</div>
+        </div>
+        <div class="faculty-list-actions">
+            <a href="{% url 'exams:question_bank_builder' b.pk %}" class="btn btn-outline btn-sm" data-portal-full>Open Builder</a>
+            <form method="post" action="{% url 'exams:question_add' b.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-sm">Add Question</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% empty %}
+<div class="portal-card">
+    <p class="admin-empty">No question banks yet.</p>
+    <a href="{% url 'exams:question_bank_create' %}" class="btn btn-primary btn-sm" data-portal-full>Create Question Bank</a>
+</div>
+{% endfor %}
+</div>

@@ -1,0 +1,40 @@
+<div class="portal-page" data-portal-nav="teachers" data-portal-title="Teacher Approvals">
+{% if messages %}
+<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+{% endif %}
+
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">Teacher Approvals</h1>
+        <p class="admin-page-subtitle">Review new faculty registrations before they can access the platform</p>
+    </div>
+    {% include "includes/portal_tab_link.html" with href=dashboard_url label="← Dashboard" class="btn btn-outline btn-sm" only %}
+</div>
+
+<section class="portal-card">
+    <div class="admin-card-header">
+        <h2 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="users" size="sm" only %} Pending Teacher Registrations</h2>
+    </div>
+    {% for item in teacher_items %}
+    {% with t=item.profile %}
+    <div class="admin-teacher-row admin-teacher-row-list">
+        {% if t.user.profile_photo %}
+        <img src="{{ t.user.profile_photo.url }}" alt="" class="admin-teacher-photo">
+        {% else %}
+        <div class="admin-teacher-avatar">{{ t.user.first_name|slice:":1"|default:t.user.username|slice:":1"|upper }}</div>
+        {% endif %}
+        <div class="admin-teacher-info">
+            <div class="admin-teacher-name">{{ t.user.get_full_name|default:t.user.username }}</div>
+            <div class="admin-teacher-meta">{{ t.user.email }}</div>
+            <div class="admin-teacher-meta">{{ t.department|default:"—" }} · Staff ID: {{ t.staff_id_number|default:"—" }}</div>
+        </div>
+        <div class="admin-teacher-actions">
+            {% include "includes/portal_tab_link.html" with href=item.review_url label="Review Profile" class="btn btn-primary btn-sm" only %}
+        </div>
+    </div>
+    {% endwith %}
+    {% empty %}
+    <p class="admin-empty">No pending teacher registrations.</p>
+    {% endfor %}
+</section>
+</div>

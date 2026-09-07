@@ -1,0 +1,4 @@
+# Model Lab extras (the web app does NOT need these).
+# torch, ultralytics, opencv-python and numpy are already installed via the
+# project's main requirements.txt.
+streamlit>=1.32

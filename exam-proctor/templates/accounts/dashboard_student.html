@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Student Dashboard{% endblock %}
+
+{% block body %}
+{% include "includes/portal_header_student.html" with student_nav_dashboard="active" %}
+
+<div class="portal-page">
+    {% if messages %}
+    <ul class="messages" style="max-width:1280px;margin:0 auto 1rem;">
+        {% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="student-grid">
+        <div class="student-main">
+            <div class="campus-banner campus-banner--1" role="presentation">
+                <div>
+                    <h2 class="campus-banner-title">Welcome back, {{ user.get_full_name|default:user.username }}</h2>
+                    <p class="campus-banner-sub">Monitored examination environment · AI proctoring active</p>
+                </div>
+            </div>
+
+            <div class="portal-card">
+                <p style="color:var(--color-text-muted);font-size:0.9rem;line-height:1.6;margin:0;">
+                    You are entering a monitored examination environment. All sessions are recorded via
+                    AI Computer Vision and audio/video proctoring to ensure academic integrity.
+                </p>
+                <div class="portal-notice-card">
+                    {% include "includes/icon.html" with name="shield" only %}
+                    <div class="portal-notice-content">
+                        <strong class="portal-notice-title">Notice on Academic Integrity</strong>
+                        <p class="portal-notice-body">Any attempt at face replacement, secondary devices, or additional voices in the audio feed will trigger immediate proctor flagging.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="portal-card">
+                <h3 class="portal-card-title portal-card-title--icon">
+                    {% include "includes/icon.html" with name="calendar" size="sm" only %} Upcoming Examinations
+                    <span class="badge-count">{{ scheduled_count }} Scheduled</span>
+                </h3>
+
+                {% for item in active_exam_items %}
+                {% with exam=item.exam %}
+                <div class="exam-item">
+                    <div class="exam-date-box">
+                        <div class="day">TODAY</div>
+                        {% if exam.available_from %}{{ exam.available_from|time:"H:i" }}{% else %}Active{% endif %}
+                    </div>
+                    <div>
+                        <div class="exam-item-title">{{ exam.course.code }}: {{ exam.title }}</div>
+                        <div class="exam-item-meta">
+                            Duration: {{ exam.duration_minutes }} Mins ·
+                            Questions: {{ exam.exam_questions.count }} items
+                        </div>
+                        <div class="exam-active-label">{% if item.resume_attempt %}In progress — resume anytime{% else %}Active Window{% endif %}</div>
+                    </div>
+                    <div class="exam-item-actions">
+                        {% if item.resume_attempt %}
+                        <a href="{% url 'exams:take' item.resume_attempt.pk %}" class="btn btn-primary btn-sm">Continue Exam</a>
+                        {% else %}
+                        <form method="post" action="{% url 'exams:start' exam.pk %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary btn-sm">Start Exam</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endwith %}
+                {% endfor %}
+
+                {% for item in locked_exams %}
+                {% with exam=item.exam %}
+                <div class="exam-item">
+                    <div class="exam-date-box">
+                        {% if exam.available_from %}
+                        <div class="day">{{ exam.available_from|date:"M d" }}</div>
+                        {{ exam.available_from|time:"H:i" }}
+                        {% else %}<div class="day">TBA</div>{% endif %}
+                    </div>
+                    <div>
+                        <div class="exam-item-title">{{ exam.course.code }}: {{ exam.title }}</div>
+                        <div class="exam-item-meta">{{ exam.course.title }}</div>
+                        {% if item.availability == 'scheduled' and exam.available_from %}
+                        <div class="exam-locked-label">Opens {{ exam.available_from|date:"M d, H:i" }}</div>
+                        {% elif item.availability == 'ended' and exam.available_until %}
+                        <div class="exam-locked-label">Window closed — ended {{ exam.available_until|date:"M d, H:i" }}</div>
+                        {% elif item.availability == 'frozen' %}
+                        <div class="exam-locked-label">Exam paused by administrator</div>
+                        {% else %}
+                        <div class="exam-locked-label">Not available right now</div>
+                        {% endif %}
+                    </div>
+                    <div class="exam-item-actions">
+                        <span class="status-locked check-row-label">{% include "includes/icon.html" with name="lock" size="sm" only %} Locked</span>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endfor %}
+
+                {% if not active_exams and not locked_exams %}
+                <p style="color:var(--color-text-muted);font-size:0.9rem;">
+                    No upcoming exams scheduled. Use the <strong>Redeem Access Code</strong> button above to unlock a code-gated exam.
+                </p>
+                {% endif %}
+            </div>
+
+            {% if past_results %}
+            <div class="portal-card">
+                <h3 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="clipboard" size="sm" only %} Past Examinations &amp; Proctoring Summary</h3>
+                <div class="past-exams-grid">
+                    {% for item in past_results %}
+                    {% with a=item.attempt %}
+                    <div class="past-exam-card">
+                        <div class="course-code">{{ a.exam.course.code }}: {{ a.exam.title|truncatewords:4 }}</div>
+                        <div class="course-name">Completed: {{ a.ended_at|date:"M d, Y"|default:a.started_at|date:"M d, Y" }}</div>
+                        <span class="badge-passed {% if not a.passed and a.passed is not None %}warn{% endif %}">
+                            {% if a.passed %}Passed{% elif a.passed is None %}Pending Review{% else %}Review{% endif %}
+                        </span>
+                        <div class="past-exam-stats">
+                            <div>
+                                <div class="stat-label">Score</div>
+                                <div class="stat-value">{{ a.percentage|floatformat:0|default:"—" }}%</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Integrity Index</div>
+                                <div class="stat-value">{{ item.integrity }}%</div>
+                            </div>
+                        </div>
+                        <div class="past-exam-footer">
+                            {% if item.violations %}
+                            <span class="violation-warn">{% include "includes/icon.html" with name="warning" size="sm" only %} {{ item.violations }} Warning{{ item.violations|pluralize }} Flagged</span>
+                            {% else %}
+                            <span class="violation-ok">{% include "includes/icon.html" with name="check" size="sm" only %} Zero Violations Flagged</span>
+                            {% endif %}
+                            <a href="{% url 'exams:result' a.pk %}" style="font-size:0.8rem;font-weight:600;color:var(--color-primary);">View Feedback →</a>
+                        </div>
+                    </div>
+                    {% endwith %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <aside class="precheck-panel">
+            <div class="portal-card">
+                <h3 class="portal-card-title" style="margin:0 0 1rem;">Proctored Exam</h3>
+                <div class="webcam-preview" id="dashboard-webcam-wrap">
+                    <video id="dashboard-webcam" autoplay playsinline muted></video>
+                    <span class="webcam-overlay-tag">LIVE FEED</span>
+                </div>
+                <div class="precheck-confirm precheck-confirm-inner portal-notice-card portal-notice-card--compact" style="margin-top:1rem;">
+                    {% include "includes/icon.html" with name="shield" size="sm" only %}
+                    <div class="portal-notice-content">
+                        <strong class="portal-notice-title">Monitoring active during exam</strong>
+                        <p class="portal-notice-body">Your webcam feed is recorded and analyzed for infractions. Exiting fullscreen or switching tabs will trigger warnings.</p>
+                    </div>
+                </div>
+                {% if active_exam %}
+                {% if active_exam_resume %}
+                <a href="{% url 'exams:take' active_exam_resume.pk %}" class="btn-start-exam btn-start-exam-inner">
+                    {% include "includes/icon.html" with name="play" size="sm" css_class="portal-icon portal-icon--header" only %} CONTINUE EXAM ({{ active_exam.course.code }})
+                </a>
+                {% else %}
+                <form method="post" action="{% url 'exams:start' active_exam.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-start-exam btn-start-exam-inner">
+                        {% include "includes/icon.html" with name="play" size="sm" css_class="portal-icon portal-icon--header" only %} START ACTIVE EXAM ({{ active_exam.course.code }})
+                    </button>
+                </form>
+                {% endif %}
+                {% else %}
+                <button class="btn-start-exam btn-start-exam-inner" disabled style="opacity:0.5;cursor:not-allowed;">
+                    {% include "includes/icon.html" with name="play" size="sm" only %} NO ACTIVE EXAM
+                </button>
+                {% endif %}
+            </div>
+        </aside>
+    </div>
+</div>
+
+<script>
+(function () {
+    const video = document.getElementById('dashboard-webcam');
+    if (video && navigator.mediaDevices) {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+            .then((stream) => { video.srcObject = stream; })
+            .catch(() => {});
+    }
+})();
+</script>
+{% endblock %}

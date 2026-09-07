@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Student sign in — Exam Proctor{% endblock %}
+{% block body %}
+<div class="auth-layout">
+    <div class="auth-card">
+        <div class="auth-card-header">
+            <div class="portal-logo auth-logo">
+                {% include "includes/icon.html" with name="graduation" size="md" only %}
+            </div>
+            <h1 class="auth-title">Student portal</h1>
+            <p class="auth-subtitle">Sign in to take exams and view your results</p>
+        </div>
+
+        {% include "accounts/_login_form.html" %}
+
+        <p class="auth-footer">
+            New student?
+            <a href="{% url 'accounts:register_student' %}">Register here</a>
+        </p>
+        <p class="auth-footer auth-footer--muted">
+            Not a student?
+            <a href="{% url 'accounts:login' %}">Use a different portal</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,136 @@
+<div class="portal-page" data-portal-nav="student_ids" data-portal-title="Review Student ID">
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">{{ student_user.get_full_name|default:student_user.username }}</h1>
+        <p class="admin-page-subtitle">
+            Student ID verification ·
+            <span class="admin-status-badge {% if profile.id_review_status == 'approved' %}active{% else %}pending{% endif %}">
+                {{ profile.get_id_review_status_display }}
+            </span>
+            {% if profile.id_card_verified %}
+            <span class="admin-status-badge active">OCR Passed</span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="admin-page-actions">
+        {% include "includes/portal_tab_link.html" with href=back_url label="← Student ID Reviews" class="btn btn-outline btn-sm" only %}
+        {% include "includes/portal_tab_link.html" with href=dashboard_url label="Dashboard" class="btn btn-outline btn-sm" only %}
+    </div>
+</div>
+
+<div class="admin-content-grid" style="grid-template-columns: 1fr 320px;">
+    <div>
+        <section class="portal-card">
+            <h3 class="portal-card-title">Personal information</h3>
+            <div class="teacher-review-profile">
+                <div class="teacher-review-avatar-wrap">
+                    {% if student_user.profile_photo %}
+                    <img src="{{ student_user.profile_photo.url }}" alt="Profile photo" class="teacher-review-photo">
+                    <div class="teacher-review-photo-label">Profile photo</div>
+                    {% else %}
+                    <div class="admin-teacher-avatar teacher-review-photo-placeholder">{{ student_user.first_name|slice:":1"|default:student_user.username|slice:":1"|upper }}</div>
+                    <div class="teacher-review-photo-label">No profile photo</div>
+                    {% endif %}
+                </div>
+                <div class="exam-detail-grid teacher-review-details">
+                    <div><span class="detail-label">Full name</span><span>{{ student_user.get_full_name|default:"—" }}</span></div>
+                    <div><span class="detail-label">Username</span><span>{{ student_user.username }}</span></div>
+                    <div><span class="detail-label">Email</span><span>{{ student_user.email|default:"—" }}</span></div>
+                    <div><span class="detail-label">Phone</span><span>{{ student_user.phone|default:"—" }}</span></div>
+                    <div><span class="detail-label">Index number</span><span>{{ profile.student_id_number }}</span></div>
+                    <div><span class="detail-label">Programme</span><span>{{ profile.programme|default:"—" }}</span></div>
+                    <div><span class="detail-label">Registered</span><span>{{ student_user.date_joined|date:"M d, Y H:i" }}</span></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-card">
+            <h3 class="portal-card-title">Student ID card</h3>
+            {% if profile.id_proof_image %}
+            <div class="teacher-id-display">
+                <img src="{{ profile.id_proof_image.url }}" alt="KNUST student ID card" class="teacher-id-image">
+            </div>
+            {% else %}
+            <p class="admin-empty">No student ID image uploaded.</p>
+            {% endif %}
+        </section>
+
+        <section class="portal-card">
+            <h3 class="portal-card-title">Automatic OCR check</h3>
+            {% if matched_fields %}
+            <div class="teacher-verification-matches">
+                {% for key, value in matched_fields.items %}
+                <span class="teacher-verify-chip">{{ key }}: {{ value }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if ocr_errors %}
+            <ul class="pending-steps-list" style="margin-top:0.5rem;">
+                {% for err in ocr_errors %}<li>{{ err }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+            {% if ocr_preview %}
+            <details class="teacher-ocr-details">
+                <summary>OCR text preview</summary>
+                <pre class="teacher-ocr-preview">{{ ocr_preview }}</pre>
+            </details>
+            {% endif %}
+        </section>
+    </div>
+
+    <aside>
+        <section class="portal-card">
+            <h3 class="portal-card-title">Review decision</h3>
+            <p class="faculty-page-sub" style="margin:0 0 1rem;">
+                Confirm the photo, name, and index number on the ID card match the student profile before approving exam access.
+            </p>
+
+            {% if profile.id_review_status == 'pending' %}
+            <form method="post">
+                {% csrf_token %}
+                <label class="qb-label" for="review_notes">Notes (optional)</label>
+                <textarea id="review_notes" name="review_notes" rows="3" placeholder="Notes for the student or audit trail…" style="width:100%;padding:0.625rem;border:1px solid var(--color-border);border-radius:var(--radius-md);font-family:inherit;font-size:0.875rem;margin-bottom:0.75rem;"></textarea>
+                <button type="submit" name="action" value="approve" class="btn btn-primary btn-sm" style="width:100%;margin-bottom:0.75rem;">
+                    Approve Student
+                </button>
+                <button type="submit" name="action" value="reject" class="btn btn-danger-outline btn-sm" style="width:100%;">
+                    Reject ID
+                </button>
+            </form>
+            {% else %}
+            <div class="teacher-approved-notice">
+                <span class="admin-status-badge {% if profile.id_review_status == 'approved' %}active{% else %}pending{% endif %}">
+                    {{ profile.get_id_review_status_display }}
+                </span>
+                {% if profile.id_reviewed_by %}
+                <p class="faculty-list-meta" style="margin-top:0.75rem;">
+                    By {{ profile.id_reviewed_by.get_full_name|default:profile.id_reviewed_by.username }}
+                    {% if profile.id_reviewed_at %}on {{ profile.id_reviewed_at|date:"M d, Y H:i" }}{% endif %}
+                </p>
+                {% endif %}
+                {% if profile.id_review_notes %}
+                <p class="faculty-list-meta" style="margin-top:0.5rem;">{{ profile.id_review_notes }}</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </section>
+
+        <section class="portal-card">
+            <h3 class="portal-card-title">Checklist</h3>
+            <ul class="teacher-review-checklist">
+                <li class="{% if student_user.profile_photo %}done{% endif %}">Profile photo uploaded</li>
+                <li class="{% if profile.id_proof_image %}done{% endif %}">Student ID image uploaded</li>
+                <li class="{% if profile.id_card_verified %}done{% endif %}">Automatic OCR check passed</li>
+                <li class="{% if profile.student_id_number %}done{% endif %}">Index number provided</li>
+                <li class="{% if profile.programme %}done{% endif %}">Programme listed</li>
+            </ul>
+        </section>
+    </aside>
+</div>
+</div>

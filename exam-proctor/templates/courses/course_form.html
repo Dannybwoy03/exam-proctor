@@ -1,0 +1,19 @@
+{% extends "layouts/portal.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block portal_content %}
+<div class="portal-page" data-portal-nav="courses" data-portal-title="{{ title }}">
+    <div class="faculty-page-header">
+        <div>
+            <h2 class="faculty-page-title">{{ title }}</h2>
+        </div>
+        <a href="{% url 'courses:list' %}" class="btn btn-outline btn-sm" data-portal-tab>← Courses</a>
+    </div>
+    <div class="portal-card">
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

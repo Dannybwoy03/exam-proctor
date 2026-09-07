@@ -1,0 +1,38 @@
+{% if messages %}
+{% for message in messages %}
+<div class="portal-notice-card portal-notice-card--compact auth-feedback-notice" role="status">
+    {% include "includes/icon.html" with name="shield" size="sm" only %}
+    <div class="portal-notice-content">
+        <p class="portal-notice-body"><strong>{{ message }}</strong></p>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<form method="post" novalidate autocomplete="off">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="portal-notice-card portal-notice-card--compact auth-feedback-notice auth-feedback-notice--error" role="alert" aria-live="assertive">
+        {% include "includes/icon.html" with name="warning" size="sm" only %}
+        <div class="portal-notice-content">
+            <strong class="portal-notice-title">Sign in failed</strong>
+            {% for error in form.non_field_errors %}
+            <p class="portal-notice-body">{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% for field in form %}
+    <div class="auth-field{% if field.errors or form.non_field_errors %} auth-field--error{% endif %}">
+        <label class="auth-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% for error in field.errors %}
+        <p class="field-error" id="{{ field.id_for_label }}-error">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-primary auth-submit">Sign in as {{ role_label }}</button>
+</form>

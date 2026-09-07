@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ exam.title }}{% endblock %}
+{% block body %}
+{% include "includes/portal_header.html" with portal_breadcrumb="EXAM DETAIL" %}
+<div class="portal-layout">
+    {% include "includes/portal_sidebar.html" %}
+    <main class="portal-main">
+        <div class="faculty-page-header">
+            <div>
+                <h2 class="faculty-page-title">{{ exam.title }}</h2>
+                <p class="faculty-page-sub">{{ exam.course.code }} · {{ exam.get_approval_status_display }} · {% if exam.is_published %}Published{% else %}Draft{% endif %} · {{ exam_questions|length }} question{{ exam_questions|length|pluralize }}{% if exam.is_frozen %} · <strong class="exam-status-frozen">FROZEN</strong>{% endif %}</p>
+            </div>
+            <div class="faculty-list-actions">
+                <a href="{% url 'exams:exam_questions' exam.pk %}" class="btn btn-primary btn-sm">Manage Questions</a>
+                <a href="{% url 'exams:edit' exam.pk %}" class="btn btn-outline btn-sm">Edit Schedule</a>
+                <a href="{% url 'exams:exam_preview' exam.pk %}" class="btn btn-outline btn-sm">Preview</a>
+            </div>
+        </div>
+
+        {% if messages %}
+        <ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+        {% endif %}
+
+        <div class="portal-card">
+            <h3 class="portal-card-title">Exam settings</h3>
+            <div class="exam-detail-grid">
+                <div><span class="detail-label">Duration</span><span>{{ exam.duration_minutes }} minutes</span></div>
+                <div><span class="detail-label">Passing marks</span><span>{{ exam.passing_marks }} / {{ exam.total_marks }}</span></div>
+                <div><span class="detail-label">Shuffle</span><span>{% if exam.shuffle_questions %}Yes{% else %}No{% endif %}</span></div>
+                <div><span class="detail-label">Access code required</span><span>{% if exam.requires_access_code %}Yes{% else %}No{% endif %}</span></div>
+                {% if exam.available_from %}<div><span class="detail-label">Available from</span><span>{{ exam.available_from }}</span></div>{% endif %}
+                {% if exam.available_until %}<div><span class="detail-label">Available until</span><span>{{ exam.available_until }}</span></div>{% endif %}
+                <div><span class="detail-label">Student access</span><span>{{ exam.availability_state_label }}</span></div>
+            </div>
+            {% if exam.description %}<p style="margin:1rem 0 0;font-size:0.875rem;color:var(--color-text-muted);">{{ exam.description }}</p>{% endif %}
+
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1.25rem;">
+                {% if user.is_teacher_user %}
+                    {% if exam.approval_status == 'draft' or exam.approval_status == 'rejected' %}
+                    <form method="post" action="{% url 'exams:submit_approval' exam.pk %}">{% csrf_token %}<button type="submit" class="btn btn-primary btn-sm">Submit for Admin Approval</button></form>
+                    {% elif exam.approval_status == 'pending' %}
+                    <span class="admin-status-badge pending">Awaiting admin approval</span>
+                    {% elif exam.approval_status == 'approved' and not exam.is_published %}
+                    <form method="post" action="{% url 'exams:publish' exam.pk %}">{% csrf_token %}<button type="submit" class="btn btn-primary btn-sm">Publish Exam</button></form>
+                    {% endif %}
+                {% elif user.is_admin_user %}
+                    {# Admins approve via the dedicated review page; they don't submit or publish #}
+                    {% if exam.approval_status == 'pending' %}
+                    <a href="{% url 'exams:admin_exam_review' exam.pk %}" class="btn btn-primary btn-sm">Review for Approval</a>
+                    {% elif exam.approval_status == 'approved' %}
+                    <span class="admin-status-badge approved">Approved{% if not exam.is_published %} — awaiting teacher publish{% endif %}</span>
+                    {% elif exam.approval_status == 'rejected' %}
+                    <span class="admin-status-badge rejected">Rejected</span>
+                    {% else %}
+                    <span class="admin-status-badge">Draft — teacher has not submitted</span>
+                    {% endif %}
+                {% endif %}
+                {% if exam.rejection_reason %}<p class="field-error">Rejected: {{ exam.rejection_reason }}</p>{% endif %}
+                <a href="{% url 'exams:generate_code' exam.pk %}" class="btn btn-outline btn-sm">Generate Access Code</a>
+                <a href="{% url 'exams:pending_reviews' exam.pk %}" class="btn btn-outline btn-sm">Pending Reviews</a>
+            </div>
+        </div>
+
+        <div class="portal-card">
+            <h3 class="portal-card-title">Questions ({{ exam_questions|length }})</h3>
+            {% for eq in exam_questions %}
+            <div class="question-bank-row compact">
+                <span class="question-type-badge">{{ eq.question.get_question_type_display }}</span>
+                <span>{{ eq.question.text|truncatewords:20 }}</span>
+                <span class="exam-question-order-marks">{{ eq.marks_override|default:eq.question.marks }} pts</span>
+            </div>
+            {% empty %}
+            <p class="admin-empty">No questions yet. <a href="{% url 'exams:exam_questions' exam.pk %}">Add from question banks</a>.</p>
+            {% endfor %}
+        </div>
+
+        <div class="portal-card">
+            <h3 class="portal-card-title">Access codes for this exam</h3>
+            <p style="margin:0 0 0.75rem;font-size:0.82rem;color:var(--color-text-muted);">
+                Each code below unlocks <strong>only this exam</strong>{% if exam.course %} ({{ exam.course.code }} · {{ exam.title }}){% endif %}.
+                Other exams in the same course need their own codes.
+            </p>
+            <ul class="access-code-list">
+            {% for code in access_codes %}
+            <li><strong>{{ code.code }}</strong> — uses: {{ code.use_count }}{% if code.max_uses %}/{{ code.max_uses }}{% endif %}{% if code.expires_at %} · expires {{ code.expires_at|date:"M d, Y H:i" }}{% endif %}{% if not code.is_active %} · <em>inactive</em>{% endif %}</li>
+            {% empty %}
+            <li class="admin-empty">No codes yet.</li>
+            {% endfor %}
+            </ul>
+        </div>
+    </main>
+</div>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}New Question Bank — Exam Proctor{% endblock %}
+{% block body %}
+{% include "includes/question_bank_header.html" with bank=None %}
+
+<div class="qb-subbar">
+    <div class="qb-breadcrumb">
+        <a href="{% url 'exams:question_banks' %}">Question Banks</a>
+        <span>›</span>
+        <strong>New Question Bank</strong>
+    </div>
+</div>
+
+<div class="portal-layout" style="min-height:auto;">
+    {% include "includes/portal_sidebar.html" %}
+    <div class="portal-main" style="padding:1.5rem 2rem;max-width:960px;">
+
+        <div class="portal-card faculty-form-card">
+            <h2 class="faculty-page-title" style="margin:0 0 0.35rem;">Set up your question bank</h2>
+            <p class="faculty-page-sub" style="margin:0 0 1.25rem;">
+                Choose a course and title, then open the builder to add questions manually or import a CSV.
+            </p>
+
+            {% if messages %}
+            <ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+            {% endif %}
+
+            <form method="post">
+                {% csrf_token %}
+                {% for field in form %}
+                <div class="form-group" style="margin-bottom:1rem;">
+                    <label class="qb-label">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+                    {{ field }}
+                    {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                </div>
+                {% empty %}
+                <p class="admin-empty">No courses assigned to your account yet. Ask an admin to link you to a course.</p>
+                {% endfor %}
+                {% if form.fields %}
+                <button type="submit" class="btn btn-primary">Create &amp; Open Builder</button>
+                {% endif %}
+            </form>
+        </div>
+
+        <div class="qb-create-preview">
+            <h3 class="qb-csv-subtitle">What happens next</h3>
+            <div class="qb-create-steps">
+                <div class="qb-create-step">
+                    <strong>Builder</strong>
+                    <span>Manually write questions with sections, options, metadata, and marking details.</span>
+                </div>
+                <div class="qb-create-step">
+                    <strong>Bulk Import</strong>
+                    <span>Upload a UTF-8 CSV file to add many questions at once.</span>
+                </div>
+                <div class="qb-create-step">
+                    <strong>Question Library</strong>
+                    <span>Review all questions in the bank before attaching them to exams.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

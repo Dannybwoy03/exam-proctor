@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Teacher sign in — Exam Proctor{% endblock %}
+{% block body %}
+<div class="auth-layout">
+    <div class="auth-card">
+        <div class="auth-card-header">
+            <div class="portal-logo auth-logo">
+                {% include "includes/icon.html" with name="user" size="md" only %}
+            </div>
+            <h1 class="auth-title">Faculty portal</h1>
+            <p class="auth-subtitle">Sign in to build question banks and run exams</p>
+        </div>
+
+        {% include "accounts/_login_form.html" %}
+
+        <p class="auth-footer">
+            New teacher?
+            <a href="{% url 'accounts:register_teacher' %}">Register here</a>
+            — admin approval is required before first sign in.
+        </p>
+        <p class="auth-footer auth-footer--muted">
+            Not a teacher?
+            <a href="{% url 'accounts:login' %}">Use a different portal</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

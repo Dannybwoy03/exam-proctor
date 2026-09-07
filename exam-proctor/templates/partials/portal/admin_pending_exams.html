@@ -1,0 +1,22 @@
+<div class="portal-page" data-portal-nav="exam_approvals" data-portal-title="Exam Approvals">
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">Exam &amp; Question Approvals</h1>
+        <p class="admin-page-subtitle">Review teacher-submitted exams, questions, and scheduling windows.</p>
+    </div>
+</div>
+{% for exam in exams %}
+<div class="portal-card faculty-list-card">
+    <div class="faculty-list-row">
+        <div>
+            <div class="faculty-list-title">{{ exam.title }}</div>
+            <div class="faculty-list-meta">{{ exam.course.code }} · {{ exam.question_count }} questions</div>
+        </div>
+        {% url 'exams:admin_exam_review' exam.pk as exam_review_url %}
+        {% include "includes/portal_tab_link.html" with href=exam_review_url label="Review" class="btn btn-primary btn-sm" only %}
+    </div>
+</div>
+{% empty %}
+<div class="portal-card"><p class="admin-empty">No exams awaiting approval.</p></div>
+{% endfor %}
+</div>

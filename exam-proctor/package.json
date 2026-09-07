@@ -1,0 +1,27 @@
+{
+  "name": "exam-proctor",
+  "version": "1.0.0",
+  "description": "Django-based online examination platform with AI proctoring, question banks, admin approval workflows, and teacher audit tools.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "generate:chapter3": "node scripts/generate_chapter3_docx.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pyanokye/exam-proctor.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/pyanokye/exam-proctor/issues"
+  },
+  "homepage": "https://github.com/pyanokye/exam-proctor#readme",
+  "dependencies": {
+    "docx": "^9.7.1"
+  }
+}

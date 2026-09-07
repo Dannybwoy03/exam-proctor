@@ -1,0 +1,131 @@
+<div class="portal-page" data-portal-nav="users" data-portal-title="All Users">
+{% if messages %}
+<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+{% endif %}
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">All Users</h1>
+        <p class="admin-page-subtitle">Registered accounts across the platform</p>
+    </div>
+    <div class="admin-page-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <a href="{% url 'accounts:user_create' 'student' %}" class="btn btn-outline btn-sm" data-portal-tab>+ New Student</a>
+        <a href="{% url 'accounts:user_create' 'teacher' %}" class="btn btn-outline btn-sm" data-portal-tab>+ New Teacher</a>
+        {% if can_create_admin %}
+        <a href="{% url 'accounts:user_create' 'admin' %}" class="btn btn-primary btn-sm" data-portal-tab>+ New Admin</a>
+        {% endif %}
+    </div>
+</div>
+
+<section class="portal-card">
+    <div class="faculty-list-row" style="font-weight:700;font-size:0.75rem;color:var(--color-text-muted);text-transform:uppercase;border-bottom:2px solid var(--color-border);padding-bottom:0.5rem;">
+        <span style="flex:2;">User</span>
+        <span style="flex:1;">Role</span>
+        <span style="flex:1;">Joined</span>
+        <span style="flex:1;">Status</span>
+        <span style="flex:1; text-align:right;">Action</span>
+    </div>
+    {% for u in users %}
+    <div class="faculty-list-row" style="padding:0.75rem 0;border-bottom:1px solid var(--color-border-light);">
+        <div style="flex:2;">
+            <div class="faculty-list-title">{{ u.get_full_name|default:u.username }}</div>
+            <div class="faculty-list-meta">{{ u.email|default:u.username }}</div>
+        </div>
+        <div style="flex:1;">{{ u.get_role_display }}</div>
+        <div style="flex:1;">{{ u.date_joined|date:"M d, Y" }}</div>
+        <div style="flex:1;">{% if u.is_active %}<span class="admin-status-badge active">Active</span>{% else %}<span class="admin-status-badge pending">Inactive</span>{% endif %}</div>
+        <div style="flex:1; text-align:right;">
+            {% if u.pk == request.user.pk %}
+                <span class="faculty-list-meta">You</span>
+            {% elif u.role == 'admin' or u.is_superuser %}
+                {% if can_create_admin %}
+                <button type="button"
+                        class="btn {% if u.is_active %}btn-danger-outline{% else %}btn-outline{% endif %} btn-xs"
+                        data-revoke-pk="{{ u.pk }}"
+                        data-revoke-name="{{ u.get_full_name|default:u.username }}"
+                        data-revoke-role="{{ u.get_role_display }}"
+                        data-revoke-active="{{ u.is_active|yesno:'true,false' }}">
+                    {% if u.is_active %}Revoke{% else %}Reactivate{% endif %}
+                </button>
+                {% else %}
+                <span class="faculty-list-meta">Super-only</span>
+                {% endif %}
+            {% else %}
+                <button type="button"
+                        class="btn {% if u.is_active %}btn-danger-outline{% else %}btn-outline{% endif %} btn-xs"
+                        data-revoke-pk="{{ u.pk }}"
+                        data-revoke-name="{{ u.get_full_name|default:u.username }}"
+                        data-revoke-role="{{ u.get_role_display }}"
+                        data-revoke-active="{{ u.is_active|yesno:'true,false' }}">
+                    {% if u.is_active %}Revoke{% else %}Reactivate{% endif %}
+                </button>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <p class="admin-empty">No users found.</p>
+    {% endfor %}
+</section>
+
+<dialog id="revoke-confirm-dialog" class="portal-modal" aria-labelledby="revoke-confirm-title">
+    <form method="post" id="revoke-confirm-form">
+        {% csrf_token %}
+        <h2 id="revoke-confirm-title" class="portal-modal-title">Confirm action</h2>
+        <p id="revoke-confirm-message" class="portal-modal-message"></p>
+        <p id="revoke-confirm-detail" class="portal-modal-detail"></p>
+        <div class="portal-modal-actions">
+            <button type="button" class="btn btn-outline btn-sm" data-revoke-cancel>Cancel</button>
+            <button type="submit" id="revoke-confirm-submit" class="btn btn-danger-solid btn-sm">Revoke</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+(function () {
+    const dialog = document.getElementById("revoke-confirm-dialog");
+    const form = document.getElementById("revoke-confirm-form");
+    const title = document.getElementById("revoke-confirm-title");
+    const message = document.getElementById("revoke-confirm-message");
+    const detail = document.getElementById("revoke-confirm-detail");
+    const submitBtn = document.getElementById("revoke-confirm-submit");
+    if (!dialog || !form) return;
+
+    const revokeUrlTemplate = "{% url 'accounts:user_revoke' 0 %}";
+
+    document.querySelectorAll("[data-revoke-pk]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const pk = btn.dataset.revokePk;
+            const name = btn.dataset.revokeName;
+            const role = btn.dataset.revokeRole;
+            const isActive = btn.dataset.revokeActive === "true";
+            form.action = revokeUrlTemplate.replace(/\/0\//, "/" + pk + "/");
+            if (isActive) {
+                title.textContent = "Revoke account access?";
+                message.textContent = "This will deactivate " + name + " (" + role + "). They will no longer be able to log in.";
+                detail.textContent = "Their account data, exam history, and authored content are preserved. You can reactivate this account later from this page.";
+                submitBtn.textContent = "Revoke access";
+                submitBtn.className = "btn btn-danger-solid btn-sm";
+            } else {
+                title.textContent = "Reactivate account?";
+                message.textContent = "This will restore login access for " + name + " (" + role + ").";
+                detail.textContent = "They will be able to log in immediately.";
+                submitBtn.textContent = "Reactivate";
+                submitBtn.className = "btn btn-primary btn-sm";
+            }
+            if (typeof dialog.showModal === "function") {
+                dialog.showModal();
+            } else {
+                if (confirm(message.textContent)) form.submit();
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-revoke-cancel]").forEach((btn) => {
+        btn.addEventListener("click", () => dialog.close());
+    });
+
+    dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) dialog.close();
+    });
+})();
+</script>
+</div>

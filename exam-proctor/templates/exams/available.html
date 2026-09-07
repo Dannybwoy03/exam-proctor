@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Available Exams{% endblock %}
+{% block body %}
+{% include "includes/portal_header_student.html" %}
+<div class="portal-page">
+    <div style="max-width:900px;margin:0 auto;">
+        <h2 style="margin:0 0 1.5rem;">Available Examinations</h2>
+        {% for e in exams %}
+        <div class="portal-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                    <div style="font-weight:700;">{{ e.title }}</div>
+                    <div style="font-size:0.85rem;color:var(--color-text-muted);">{{ e.course.title }} · {{ e.duration_minutes }} min</div>
+                </div>
+                <form method="post" action="{% url 'exams:start' e.pk %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary">Start Exam</button>
+                </form>
+            </div>
+        </div>
+        {% empty %}
+        <div class="portal-card"><p style="color:var(--color-text-muted);">No exams available. <a href="{% url 'exams:redeem' %}">Redeem a code</a>.</p></div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

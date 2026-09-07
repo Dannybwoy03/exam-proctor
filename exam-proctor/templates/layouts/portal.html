@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ portal_page_title|default:"Exam Proctor" }}{% endblock %}
+
+{% block body %}
+{% include "includes/portal_header.html" %}
+
+<div class="portal-layout">
+    {% include "includes/portal_sidebar.html" %}
+    <main id="portal-main" class="portal-main" hx-history-elt>
+        <div id="portal-loading" class="portal-loading htmx-indicator" aria-hidden="true">
+            <span class="portal-loading-spinner"></span>
+        </div>
+        {% if portal_partial %}
+            {% include portal_partial %}
+        {% else %}
+            {% block portal_content %}{% endblock %}
+        {% endif %}
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
+<script src="{% static 'js/portal.js' %}?v=2"></script>
+{% endblock %}

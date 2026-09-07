@@ -1,0 +1,87 @@
+<div class="portal-page" data-portal-nav="exam_approvals" data-portal-title="Review Exam">
+{% if messages %}
+<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+{% endif %}
+
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">{{ exam.title }}</h1>
+        <p class="admin-page-subtitle">
+            {{ exam.course.code }} · Teacher: {{ exam.course.teacher.user.get_full_name|default:exam.course.teacher.user.username }}
+            · <span class="admin-status-badge {% if exam.approval_status == 'approved' %}active{% else %}pending{% endif %}">{{ exam.get_approval_status_display }}</span>
+            {% if exam.is_frozen %}<span class="admin-status-badge pending">FROZEN</span>{% endif %}
+        </p>
+    </div>
+    <div class="admin-page-actions">
+        {% include "includes/portal_tab_link.html" with href=back_url label="← Exam Approvals" class="btn btn-outline btn-sm" only %}
+        {% include "includes/portal_tab_link.html" with href=dashboard_url label="Dashboard" class="btn btn-outline btn-sm" only %}
+    </div>
+</div>
+
+<div class="admin-content-grid" style="grid-template-columns:1fr 340px;">
+    <section class="portal-card">
+        <h3 class="portal-card-title">Exam schedule (read-only)</h3>
+        <div class="exam-detail-grid">
+            <div><span class="detail-label">Start time</span><span>{{ exam.available_from|date:"M d, Y H:i"|default:"Not set" }}</span></div>
+            <div><span class="detail-label">End time</span><span>{{ exam.available_until|date:"M d, Y H:i"|default:"Not set" }}</span></div>
+            <div><span class="detail-label">Duration</span><span>{{ exam.duration_minutes }} min (+ {{ exam.extra_time_minutes }} extra)</span></div>
+            <div><span class="detail-label">Submitted</span><span>{{ exam.submitted_for_approval_at|date:"M d, Y H:i"|default:"—" }}</span></div>
+        </div>
+    </section>
+
+    <section class="portal-card">
+        <h3 class="portal-card-title">Admin controls</h3>
+        {% if exam.approval_status == 'pending' %}
+        <form method="post" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <button type="submit" name="action" value="approve" class="btn btn-primary btn-sm" style="width:100%;margin-bottom:0.5rem;">Approve Exam &amp; Questions</button>
+            <textarea name="rejection_reason" rows="2" placeholder="Rejection reason (optional)" style="width:100%;margin-bottom:0.5rem;padding:0.5rem;border:1px solid var(--color-border);border-radius:8px;"></textarea>
+            <button type="submit" name="action" value="reject" class="btn btn-danger-outline btn-sm" style="width:100%;">Reject</button>
+        </form>
+        {% endif %}
+
+        {% if exam.is_frozen %}
+        <form method="post" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <button type="submit" name="action" value="unfreeze" class="btn btn-primary btn-sm" style="width:100%;">Unfreeze Exam</button>
+        </form>
+        <p class="faculty-list-meta">Frozen: {{ exam.frozen_reason }}</p>
+        {% else %}
+        <form method="post" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="freeze">
+            {{ freeze_form.reason }}
+            <button type="submit" class="btn btn-danger-outline btn-sm" style="width:100%;margin-top:0.5rem;">Freeze Exam (Outage)</button>
+        </form>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_time">
+            <label class="qb-label">Add time to exam</label>
+            {{ add_time_form.minutes }}
+            <button type="submit" class="btn btn-outline btn-sm" style="width:100%;margin-top:0.5rem;">Add Minutes</button>
+        </form>
+    </section>
+</div>
+
+<section class="portal-card">
+    <h3 class="portal-card-title">Questions submitted (view only) — {{ exam_questions|length }} items</h3>
+    {% for eq in exam_questions %}
+    <div class="question-bank-row">
+        <span class="question-type-badge">{{ eq.question.get_question_type_display }}</span>
+        <div class="question-bank-body">
+            <div class="question-bank-text">Q{{ forloop.counter }}. {{ eq.question.text }}</div>
+            <div class="question-bank-meta">{{ eq.question.section }} · {{ eq.marks_override|default:eq.question.marks }} pts · Difficulty: {{ eq.question.get_difficulty_display }}</div>
+            {% if eq.question.question_type == 'mcq' %}
+            <div class="question-bank-meta">Correct: {{ eq.question.correct_answer.value }}</div>
+            {% elif eq.question.question_type == 'short_answer' %}
+            <div class="question-bank-meta">Reference: {{ eq.question.correct_answer.reference }}</div>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <p class="admin-empty">No questions attached to this exam.</p>
+    {% endfor %}
+</section>
+</div>

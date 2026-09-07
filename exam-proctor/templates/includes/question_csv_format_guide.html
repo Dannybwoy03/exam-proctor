@@ -1,0 +1,64 @@
+<div class="portal-card qb-csv-guide">
+    <h3 class="portal-card-title">CSV format guide</h3>
+    <p class="qb-csv-intro">
+        Follow these rules when preparing a bulk import file. The format is inspired by common
+        exam-platform conventions (e.g. Moodle CSV question import): one row per question, a header
+        row, and UTF-8 encoding.
+    </p>
+
+    <div class="qb-csv-rules">
+        <div class="qb-csv-rule">
+            <strong>File type</strong>
+            <span>Save as <code>.csv</code> in UTF-8. Do not upload Excel (<code>.xlsx</code>) files.</span>
+        </div>
+        <div class="qb-csv-rule">
+            <strong>Header row</strong>
+            <span>The first line must list column names exactly as shown below.</span>
+        </div>
+        <div class="qb-csv-rule">
+            <strong>One question per row</strong>
+            <span>Each line after the header is a single question.</span>
+        </div>
+        <div class="qb-csv-rule">
+            <strong>Commas in text</strong>
+            <span>Wrap any field that contains commas in double quotes, e.g. <code>"What is 2+2?"</code></span>
+        </div>
+        <div class="qb-csv-rule">
+            <strong>Question types</strong>
+            <span><code>mcq</code>, <code>true_false</code>, or <code>short_answer</code> (aliases like <code>tf</code> also work).</span>
+        </div>
+    </div>
+
+    <h4 class="qb-csv-subtitle">Columns</h4>
+    <table class="qb-csv-table">
+        <thead>
+            <tr>
+                <th>Column</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><code>type</code></td><td>Yes</td><td><code>mcq</code>, <code>true_false</code>, or <code>short_answer</code></td></tr>
+            <tr><td><code>text</code></td><td>Yes</td><td>Question stem / prompt</td></tr>
+            <tr><td><code>correct</code></td><td>Yes</td><td>MCQ: option key (A–F) or matching option text · T/F: <code>true</code> or <code>false</code> · Short: reference answer</td></tr>
+            <tr><td><code>marks</code></td><td>Yes</td><td>Positive whole number (points)</td></tr>
+            <tr><td><code>option_a</code> … <code>option_f</code></td><td>MCQ only</td><td>At least two options for multiple choice</td></tr>
+            <tr><td><code>explanation</code></td><td>No</td><td>Feedback shown after grading (if enabled)</td></tr>
+            <tr><td><code>section</code></td><td>No</td><td>Outline label, e.g. <code>Section A: Multiple Choice</code></td></tr>
+            <tr><td><code>difficulty</code></td><td>No</td><td><code>easy</code>, <code>medium</code>, or <code>hard</code></td></tr>
+            <tr><td><code>blooms_level</code></td><td>No</td><td>e.g. <code>Remember</code>, <code>Apply</code>, <code>Analyze</code></td></tr>
+            <tr><td><code>tags</code></td><td>No</td><td>Comma-separated module tags (quote the cell if tags contain commas)</td></tr>
+        </tbody>
+    </table>
+
+    <h4 class="qb-csv-subtitle">Example file</h4>
+    <pre class="csv-sample">type,text,option_a,option_b,option_c,option_d,correct,marks,explanation,section,difficulty,blooms_level,tags
+mcq,"Which data structure uses LIFO ordering?",Stack,Queue,Tree,Graph,A,2,"A stack is Last-In-First-Out.",Section A: Multiple Choice,medium,Remember,"Data Structures"
+true_false,"A binary tree can have at most two children per node.",,,,,true,1,,Section A: True / False,easy,Understand,Trees
+short_answer,"Define polymorphism.",,,,,ability to take many forms,3,Open-ended.,Section B: Short Answer,medium,Understand,OOP</pre>
+
+    <div class="qb-csv-actions">
+        <a href="{% url 'exams:question_import_sample' %}" class="btn btn-outline btn-sm">Download sample CSV</a>
+    </div>
+</div>

@@ -1,0 +1,5 @@
+type,text,option_a,option_b,option_c,option_d,correct,marks,explanation,section,difficulty,blooms_level,tags
+mcq,"Which data structure uses LIFO ordering?",Stack,Queue,Tree,Graph,A,2,"A stack is Last-In-First-Out.",Section A: Multiple Choice,medium,Remember,"Data Structures,Stacks"
+mcq,"What is the time complexity of binary search?",O(n),O(log n),O(n log n),O(1),B,2,,Section A: Multiple Choice,hard,Analyze,"Algorithms,Complexity"
+true_false,"A binary tree can have at most two children per node.",,,,,true,1,,Section A: True / False,easy,Understand,"Trees"
+short_answer,"Define polymorphism in object-oriented programming.",,,,,ability to take many forms,3,Accept reasonable definitions.,Section B: Short Answer,medium,Understand,"OOP,Polymorphism"

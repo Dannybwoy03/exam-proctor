@@ -1,0 +1,146 @@
+<div class="portal-page" data-portal-nav="{{ portal_nav }}" data-portal-title="Review Teacher">
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">{{ teacher_user.get_full_name|default:teacher_user.username }}</h1>
+        <p class="admin-page-subtitle">
+            Faculty registration review ·
+            <span class="admin-status-badge {% if profile.approval_status == 'approved' %}active{% else %}pending{% endif %}">
+                {{ profile.get_approval_status_display }}
+            </span>
+            {% if profile.id_card_verified %}
+            <span class="admin-status-badge active">ID Verified</span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="admin-page-actions">
+        {% include "includes/portal_tab_link.html" with href=back_url label=back_label class="btn btn-outline btn-sm" only %}
+        {% include "includes/portal_tab_link.html" with href=dashboard_url label="Dashboard" class="btn btn-outline btn-sm" only %}
+    </div>
+</div>
+
+<div class="admin-content-grid" style="grid-template-columns: 1fr 320px;">
+    <div>
+        <section class="portal-card">
+            <h3 class="portal-card-title">Personal information</h3>
+            <div class="teacher-review-profile">
+                <div class="teacher-review-avatar-wrap">
+                    {% if teacher_user.profile_photo %}
+                    <img src="{{ teacher_user.profile_photo.url }}" alt="Profile photo" class="teacher-review-photo">
+                    <div class="teacher-review-photo-label">Profile photo</div>
+                    {% else %}
+                    <div class="admin-teacher-avatar teacher-review-photo-placeholder">{{ teacher_user.first_name|slice:":1"|default:teacher_user.username|slice:":1"|upper }}</div>
+                    <div class="teacher-review-photo-label">No profile photo</div>
+                    {% endif %}
+                </div>
+                <div class="exam-detail-grid teacher-review-details">
+                    <div><span class="detail-label">Full name</span><span>{{ teacher_user.get_full_name|default:"—" }}</span></div>
+                    <div><span class="detail-label">Username</span><span>{{ teacher_user.username }}</span></div>
+                    <div><span class="detail-label">Email</span><span>{{ teacher_user.email|default:"—" }}</span></div>
+                    <div><span class="detail-label">Phone</span><span>{{ teacher_user.phone|default:"—" }}</span></div>
+                    <div><span class="detail-label">Department</span><span>{{ profile.department|default:"—" }}</span></div>
+                    <div><span class="detail-label">Qualification</span><span>{{ profile.qualification|default:"—" }}</span></div>
+                    <div><span class="detail-label">Staff ID number</span><span>{{ profile.staff_id_number|default:"—" }}</span></div>
+                    <div><span class="detail-label">Registered</span><span>{{ teacher_user.date_joined|date:"M d, Y H:i" }}</span></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-card">
+            <h3 class="portal-card-title">Staff ID card</h3>
+            {% if profile.id_proof_image %}
+            <div class="teacher-id-display">
+                <img src="{{ profile.id_proof_image.url }}" alt="KNUST staff ID card" class="teacher-id-image">
+            </div>
+            {% else %}
+            <p class="admin-empty">No staff ID image uploaded.</p>
+            {% endif %}
+        </section>
+
+        {% if ocr_preview or matched_fields %}
+        <section class="portal-card">
+            <h3 class="portal-card-title">ID verification (OCR)</h3>
+            {% if matched_fields %}
+            <div class="teacher-verification-matches">
+                {% for key, value in matched_fields.items %}
+                <span class="teacher-verify-chip">{{ key }}: {{ value }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if ocr_preview %}
+            <details class="teacher-ocr-details">
+                <summary>OCR text preview</summary>
+                <pre class="teacher-ocr-preview">{{ ocr_preview }}</pre>
+            </details>
+            {% endif %}
+        </section>
+        {% endif %}
+    </div>
+
+    <aside>
+        <section class="portal-card">
+            <h3 class="portal-card-title">Approval decision</h3>
+            <p class="faculty-page-sub" style="margin:0 0 1rem;">
+                Verify the profile photo matches the staff ID and that department and staff ID number are correct before approving platform access.
+            </p>
+
+            {% if profile.approval_status == 'pending' %}
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="from" value="{{ review_from }}">
+                <button type="submit" name="action" value="approve" class="btn btn-primary btn-sm" style="width:100%;margin-bottom:0.75rem;">
+                    Approve Teacher
+                </button>
+                <label class="qb-label" for="rejection_reason">Rejection reason (optional)</label>
+                <textarea id="rejection_reason" name="rejection_reason" rows="3" placeholder="Reason if rejecting this application…" style="width:100%;padding:0.625rem;border:1px solid var(--color-border);border-radius:var(--radius-md);font-family:inherit;font-size:0.875rem;margin-bottom:0.75rem;"></textarea>
+                <button type="submit" name="action" value="reject" class="btn btn-danger-outline btn-sm" style="width:100%;">
+                    Reject Application
+                </button>
+            </form>
+            {% elif profile.approval_status == 'approved' %}
+            <div class="teacher-approved-notice">
+                {% if teacher_user.is_active %}
+                <span class="admin-status-badge active">Active</span>
+                {% else %}
+                <span class="admin-status-badge pending">Access Revoked</span>
+                {% endif %}
+                {% if profile.approved_by %}
+                <p class="faculty-list-meta" style="margin-top:0.75rem;">
+                    By {{ profile.approved_by.get_full_name|default:profile.approved_by.username }}
+                    {% if profile.approved_at %}on {{ profile.approved_at|date:"M d, Y H:i" }}{% endif %}
+                </p>
+                {% endif %}
+            </div>
+            <form method="post" action="{% url 'accounts:user_revoke' teacher_user.pk %}" style="margin-top:1rem;">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ review_return_url }}">
+                <button type="submit"
+                        class="btn {% if teacher_user.is_active %}btn-danger-outline{% else %}btn-primary{% endif %} btn-sm"
+                        style="width:100%;"
+                        onclick="return confirm('{% if teacher_user.is_active %}Revoke login access for this teacher?{% else %}Restore login access for this teacher?{% endif %}');">
+                    {% if teacher_user.is_active %}Revoke Access{% else %}Reactivate Access{% endif %}
+                </button>
+            </form>
+            {% else %}
+            <span class="admin-status-badge pending">Rejected</span>
+            {% endif %}
+        </section>
+
+        <section class="portal-card">
+            <h3 class="portal-card-title">Checklist</h3>
+            <ul class="teacher-review-checklist">
+                <li class="{% if teacher_user.profile_photo %}done{% endif %}">Profile photo uploaded</li>
+                <li class="{% if profile.id_proof_image %}done{% endif %}">Staff ID image uploaded</li>
+                <li class="{% if profile.id_card_verified %}done{% endif %}">OCR ID verification passed</li>
+                <li class="{% if profile.staff_id_number %}done{% endif %}">Staff ID number provided</li>
+                <li class="{% if profile.department %}done{% endif %}">Department listed</li>
+            </ul>
+        </section>
+    </aside>
+</div>
+</div>

@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}Unauthorized — Exam Proctor{% endblock %}
+{% block body %}
+{% include "errors/unauthorized_state.html" with title="401 - Unauthorized" description="You don't have permission to access this resource. Please sign in or contact your administrator if you believe this is an error." home_url=home_url left_icon="shield" center_icon="lock" right_icon="warning" %}
+{% endblock %}

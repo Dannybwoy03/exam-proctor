@@ -1,0 +1,557 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Register — Exam Proctor{% endblock %}
+
+{% block body %}
+<div class="auth-layout auth-layout--center" style="padding:2rem 1rem;">
+    <div class="auth-card" style="max-width:520px;position:relative;">
+        <div style="text-align:center;margin-bottom:1.25rem;">
+            <div class="portal-logo" style="margin:0 auto 1rem;">E</div>
+
+            <div class="auth-role-tabs">
+                <a href="{% url 'accounts:register_student' %}" class="auth-role-tab{% if role == 'student' %} is-active{% endif %}">Student</a>
+                <a href="{% url 'accounts:register_teacher' %}" class="auth-role-tab{% if role == 'teacher' %} is-active{% endif %}">Teacher</a>
+            </div>
+
+            <h1 style="margin:0.75rem 0 0;font-size:1.25rem;">
+                {% if role == 'teacher' %}Register as Teacher{% else %}Register as Student{% endif %}
+            </h1>
+            <p style="color:var(--color-text-muted);font-size:0.875rem;margin:0.5rem 0 0;">
+                {% if role == 'student' %}
+                Upload your official <strong>KNUST Student ID card</strong> and complete a
+                <strong>live face scan</strong>. We verify your index number, name, and programme,
+                and use the scan for identity checks before exams.
+                {% else %}
+                Upload your official <strong>KNUST Staff ID card</strong>. We verify your
+                staff ID number, name, and department. Admin approval is required before login.
+                {% endif %}
+            </p>
+        </div>
+
+        <ul class="messages" id="register-errors" {% if not form.non_field_errors and not form.errors %}style="display:none;"{% endif %}>
+            {% for error in form.non_field_errors %}
+            <li class="error">{{ error }}</li>
+            {% endfor %}
+            {% for field in form %}
+                {% for error in field.errors %}
+                <li class="error">{{ field.label }}: {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+
+        <form method="post" enctype="multipart/form-data" id="register-form" action="{{ register_url }}" data-role="{{ role }}">
+            {% csrf_token %}
+            <input type="hidden" name="role" value="{{ role }}">
+
+            {% for field in form %}
+            {% if field.name == 'face_scan_data' %}
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label style="display:block;font-size:0.875rem;font-weight:500;margin-bottom:0.35rem;">
+                    {{ field.label }}
+                    <span class="required-mark">*</span>
+                </label>
+                <div id="face-scan" class="face-scan" data-input-id="{{ field.id_for_label }}">
+                    {{ field }}
+                    <div class="face-scan-frame">
+                        <video class="face-scan-video" autoplay playsinline muted hidden></video>
+                        <img class="face-scan-photo" alt="Captured face scan" hidden>
+                        <canvas class="face-scan-canvas" hidden></canvas>
+                        <div class="face-scan-placeholder" aria-hidden="true">
+                            <img src="{% static 'icons/flaticon/camera.svg' %}" alt="" width="28" height="28">
+                        </div>
+                    </div>
+                    <p class="face-scan-status" role="status"></p>
+                    <div class="face-scan-actions">
+                        <button type="button" class="btn face-scan-btn" data-action="start">Start Face Scan</button>
+                        <button type="button" class="btn face-scan-btn" data-action="capture" hidden>Capture</button>
+                        <button type="button" class="btn face-scan-btn" data-action="retake" hidden>Retake</button>
+                    </div>
+                </div>
+                {% if field.help_text %}
+                <small style="color:var(--color-text-muted);font-size:0.8rem;">{{ field.help_text }}</small>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label style="display:block;font-size:0.875rem;font-weight:500;margin-bottom:0.35rem;">
+                    {{ field.label }}
+                    {% if field.field.required %}<span class="required-mark">*</span>{% endif %}
+                </label>
+                {{ field }}
+                {% if field.help_text %}
+                <small style="color:var(--color-text-muted);font-size:0.8rem;">{{ field.help_text }}</small>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+
+            <button type="submit" class="btn btn-primary" id="register-submit" style="width:100%;margin-top:0.5rem;">
+                Create Account
+            </button>
+        </form>
+
+        <p style="text-align:center;margin-top:1.25rem;font-size:0.875rem;color:var(--color-text-muted);">
+            Already have an account? <a href="{% url 'accounts:login' %}" style="color:var(--color-primary);">Login</a>
+        </p>
+    </div>
+</div>
+
+<div id="register-loading" class="register-loading" hidden aria-live="polite" aria-busy="true">
+    <div class="register-loading-card">
+        <div class="register-spinner" aria-hidden="true"></div>
+        <p class="register-loading-title">Creating your account</p>
+        <p class="register-loading-step" id="register-loading-step">Collecting your details…</p>
+        <ul class="register-loading-steps" id="register-loading-steps">
+            <li data-step="collect" class="active">Collecting details</li>
+            <li data-step="verify">{% if role == 'teacher' %}Verifying staff ID{% else %}Verifying ID card{% endif %}</li>
+            <li data-step="done">Done</li>
+        </ul>
+    </div>
+</div>
+
+<style>
+.auth-card input[type="text"],
+.auth-card input[type="email"],
+.auth-card input[type="password"],
+.auth-card input[type="file"] {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    font-family: inherit;
+}
+.auth-card input:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
+.register-loading {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(10, 61, 46, 0.55);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+}
+.register-loading[hidden] { display: none !important; }
+
+.register-loading-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem 2rem;
+    text-align: center;
+    max-width: 360px;
+    width: 100%;
+    box-shadow: var(--shadow-lg);
+}
+
+.register-spinner {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 1.25rem;
+    border: 4px solid var(--color-primary-light);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: register-spin 0.85s linear infinite;
+}
+
+@keyframes register-spin {
+    to { transform: rotate(360deg); }
+}
+
+.register-loading-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 0 0.35rem;
+    color: var(--color-text);
+}
+
+.register-loading-step {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin: 0 0 1.25rem;
+    min-height: 1.35em;
+}
+
+.register-loading-steps {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    font-size: 0.85rem;
+}
+
+.register-loading-steps li {
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.register-loading-steps li::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-border);
+    flex-shrink: 0;
+}
+
+.register-loading-steps li.active {
+    color: var(--color-primary-dark);
+    font-weight: 600;
+    background: var(--color-primary-light);
+}
+
+.register-loading-steps li.active::before {
+    background: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(13, 79, 60, 0.2);
+}
+
+.register-loading-steps li.complete {
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.register-loading-steps li.complete::before {
+    background-color: var(--color-text-muted);
+    background-image: url("{% static 'icons/flaticon/check.svg' %}");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 10px 10px;
+    content: "";
+    color: #fff;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.register-loading-steps li.skipped {
+    display: none;
+}
+
+.register-file-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+
+.register-file-preview[hidden] {
+    display: none !important;
+}
+
+.register-file-preview-thumb {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.register-file-preview-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.register-file-preview-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.register-file-preview-clear {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.65rem;
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+.register-file-preview-clear:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
+}
+
+.face-scan {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.875rem;
+}
+
+.face-scan-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.face-scan-video,
+.face-scan-photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.face-scan-video[hidden],
+.face-scan-photo[hidden] {
+    display: none !important;
+}
+
+.face-scan-placeholder {
+    opacity: 0.45;
+}
+
+.face-scan-video:not([hidden]) ~ .face-scan-placeholder,
+.face-scan-photo:not([hidden]) ~ .face-scan-placeholder {
+    display: none;
+}
+
+.face-scan-status {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    margin: 0.6rem 0 0;
+    min-height: 1.2em;
+}
+
+.face-scan-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+
+.face-scan-btn {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.face-scan-btn:hover {
+    border-color: var(--color-text-muted);
+}
+
+.face-scan-btn[hidden] {
+    display: none !important;
+}
+</style>
+
+<script>
+(function () {
+    const form = document.getElementById("register-form");
+    if (!form) return;
+
+    const overlay = document.getElementById("register-loading");
+    const stepText = document.getElementById("register-loading-step");
+    const stepList = document.getElementById("register-loading-steps");
+    const errorBox = document.getElementById("register-errors");
+    const submitBtn = document.getElementById("register-submit");
+    const isStudent = form.dataset.role === "student";
+    const isTeacher = form.dataset.role === "teacher";
+
+    const steps = {
+        collect: {
+            label: "Collecting your details…",
+            sub: "Saving your registration information",
+        },
+        verify: {
+            label: isTeacher ? "Verifying staff ID card…" : "Verifying ID card…",
+            sub: isTeacher
+                ? "Reading your staff ID with OCR and matching staff ID number, name & department"
+                : "Reading your ID with OCR and matching index number, name & programme",
+        },
+        done: {
+            label: "Done!",
+            sub: isStudent
+                ? "Opening your dashboard…"
+                : "Redirecting to login…",
+        },
+    };
+
+    function setStep(key) {
+        const conf = steps[key];
+        if (!conf) return;
+        stepText.textContent = conf.sub || conf.label;
+        stepList.querySelectorAll("li").forEach((li) => {
+            const s = li.dataset.step;
+            li.classList.remove("active", "complete");
+            if (li.dataset.skip === "true") li.classList.add("skipped");
+            if (s === key) li.classList.add("active");
+            else if (
+                (key === "verify" && s === "collect") ||
+                (key === "done" && (s === "collect" || s === "verify"))
+            ) {
+                li.classList.add("complete");
+            }
+        });
+    }
+
+    function showErrors(errors) {
+        errorBox.innerHTML = "";
+        errorBox.style.display = "block";
+        Object.entries(errors).forEach(([field, msgs]) => {
+            msgs.forEach((msg) => {
+                const li = document.createElement("li");
+                li.className = "error";
+                li.textContent = field === "__all__" ? msg : `${field}: ${msg}`;
+                errorBox.appendChild(li);
+            });
+        });
+        errorBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function buildFilePreviews() {
+        form.querySelectorAll('input[type="file"]').forEach((input) => {
+            if (input.dataset.previewBound === "1") return;
+            input.dataset.previewBound = "1";
+            const preview = document.createElement("div");
+            preview.className = "register-file-preview";
+            preview.hidden = true;
+            preview.innerHTML = `
+                <img class="register-file-preview-thumb" alt="" />
+                <div class="register-file-preview-meta">
+                    <span class="register-file-preview-name"></span>
+                    <button type="button" class="register-file-preview-clear" aria-label="Remove selected file">Remove</button>
+                </div>
+            `;
+            input.insertAdjacentElement("afterend", preview);
+
+            const thumb = preview.querySelector(".register-file-preview-thumb");
+            const nameEl = preview.querySelector(".register-file-preview-name");
+            const clearBtn = preview.querySelector(".register-file-preview-clear");
+
+            function render() {
+                if (!input.files || input.files.length === 0) {
+                    preview.hidden = true;
+                    thumb.removeAttribute("src");
+                    nameEl.textContent = "";
+                    return;
+                }
+                const file = input.files[0];
+                nameEl.textContent = file.name;
+                preview.hidden = false;
+                if (file.type && file.type.startsWith("image/")) {
+                    thumb.src = URL.createObjectURL(file);
+                    thumb.style.display = "";
+                } else {
+                    thumb.removeAttribute("src");
+                    thumb.style.display = "none";
+                }
+            }
+            input.addEventListener("change", render);
+            clearBtn.addEventListener("click", () => {
+                input.value = "";
+                render();
+            });
+            render();
+        });
+    }
+    buildFilePreviews();
+
+    function sleep(ms) {
+        return new Promise((r) => setTimeout(r, ms));
+    }
+
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const faceScanInput = form.querySelector('input[name="face_scan_data"]');
+        if (faceScanInput && !faceScanInput.value) {
+            showErrors({ "Face Scan": ["Complete the face scan with your webcam before submitting."] });
+            return;
+        }
+
+        errorBox.style.display = "none";
+        errorBox.innerHTML = "";
+        submitBtn.disabled = true;
+        overlay.hidden = false;
+
+        setStep("collect");
+        await sleep(500);
+
+        if (isStudent || isTeacher) {
+            setStep("verify");
+        }
+
+        const formData = new FormData(form);
+        const csrf = form.querySelector("[name=csrfmiddlewaretoken]").value;
+
+        try {
+            const response = await fetch(form.action || window.location.href, {
+                method: "POST",
+                body: formData,
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRFToken": csrf,
+                },
+                credentials: "same-origin",
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                setStep("done");
+                if (data.message) {
+                    stepText.textContent = data.message;
+                } else {
+                    stepText.textContent = isStudent
+                        ? "Account verified — opening your dashboard…"
+                        : "Account created — redirecting to login…";
+                }
+                await sleep(900);
+                window.location.href = data.redirect;
+                return;
+            }
+
+            overlay.hidden = true;
+            submitBtn.disabled = false;
+            showErrors(data.errors || { __all__: ["Registration failed. Please try again."] });
+        } catch (err) {
+            overlay.hidden = true;
+            submitBtn.disabled = false;
+            showErrors({ __all__: ["Something went wrong. Please try again."] });
+        }
+    });
+})();
+</script>
+{% if role == 'student' %}
+<script src="{% static 'js/face_scan.js' %}"></script>
+{% endif %}
+{% endblock %}

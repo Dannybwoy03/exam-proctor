@@ -1,0 +1,26 @@
+---
+description: Create a reviewable todo list before executing multi-step UI or navigation changes
+alwaysApply: true
+---
+
+# Confirm Before Execute
+
+For every user prompt that involves **implementation** (not pure Q&A):
+
+1. **Create a todo list first** using the todo tool — break the work into reviewable steps.
+2. **Present the plan briefly** in your reply so the user can confirm scope before large changes.
+3. **Check existing shared components** before adding new ones:
+   - Sidebar: `templates/includes/portal_sidebar.html` only — do not create alternate sidebars.
+   - Header: `templates/includes/portal_header.html` (role-aware wrapper).
+   - Layout wrapper: `portal-layout` + `portal-main`.
+   - Active nav key: `portal_nav` in view context (not `faculty_nav` / `admin_nav`).
+4. **Extend, don't duplicate** — if a page needs navigation, include the canonical partial; never inline a second copy of nav links.
+5. **Mark todos complete** as each step finishes.
+
+Navigation and layout must stay **consistent across roles** (admin sees admin items + shared routes; teacher sees teacher subset) using the **same** sidebar partial.
+
+**Tab navigation:** Sidebar items use HTMX (`hx-get` → `#portal-main`). Tab views must use `render_portal()` from `apps/accounts/portal.py` and put page body in `templates/partials/portal/`. Sub-pages (forms, detail) extend `layouts/portal.html`.
+
+**Icons:** Never use emojis in the UI. Use Flaticon icons from `static/icons/flaticon/` — see `docs/PLAN.md`.
+
+**Typography:** Monochromatic hierarchy only — no red/colored text for alerts. Use bold headers, regular body, neutral gray notice cards + icon prefix. See `docs/PLAN.md` § Typography.

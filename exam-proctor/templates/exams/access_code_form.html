@@ -1,0 +1,42 @@
+{% extends "layouts/portal.html" %}
+{% load static %}
+{% block portal_content %}
+<div class="portal-page">
+    <header class="exam-page-head">
+        <div>
+            <p class="exam-page-eyebrow">Distribute exam</p>
+            <h1 class="admin-page-title">Generate access code</h1>
+            <p class="exam-page-subtitle">For <strong>{{ exam.title }}</strong> · {{ exam.course.code }}</p>
+        </div>
+        <a class="btn btn-outline btn-sm" href="{% url 'exams:detail' exam.pk %}">Cancel</a>
+    </header>
+
+    <section class="portal-card">
+        <div class="portal-notice-card" style="margin-bottom:1rem;">
+            <div class="portal-notice-content">
+                <strong class="portal-notice-title">One code, one exam</strong>
+                <p class="portal-notice-body">
+                    This code grants access to <strong>{{ exam.title }}</strong> only. Students who redeem it will not
+                    see any other exam in {{ exam.course.code }} unless those exams are open-access or have their
+                    own codes redeemed.
+                </p>
+            </div>
+        </div>
+        <h2 class="portal-card-title">Code settings</h2>
+        <form method="post" class="portal-form">
+            {% csrf_token %}
+            {% for field in form %}
+                <div class="portal-form-field {% if field.errors %}auth-field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<p class="portal-form-hint">{{ field.help_text }}</p>{% endif %}
+                    {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+                </div>
+            {% endfor %}
+            <div class="portal-form-actions">
+                <button type="submit" class="btn btn-primary">Generate code</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

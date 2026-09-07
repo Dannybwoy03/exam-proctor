@@ -1,0 +1,17 @@
+Django>=4.2
+djangorestframework>=3.14
+channels>=4.0
+channels-redis>=4.1
+celery[redis]>=5.3
+redis>=5.0
+python-dotenv>=1.0
+django-ratelimit>=4.1
+Pillow>=10.0
+opencv-python-headless>=4.8
+pytesseract>=0.3.10
+torch>=2.0
+ultralytics>=8.0
+mediapipe>=0.10  # iris gaze detection (ml/gaze_service); needs face_landmarker.task in repo root
+insightface>=0.7  # face identity verification (ml/face_id); buffalo_l pack auto-downloads on first use
+onnxruntime>=1.16  # CPU inference backend for insightface
+# psycopg2-binary>=2.9

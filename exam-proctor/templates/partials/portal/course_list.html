@@ -1,0 +1,29 @@
+<div class="portal-page" data-portal-nav="courses" data-portal-title="Courses">
+<div class="faculty-page-header">
+    <div>
+        <h2 class="faculty-page-title">{% if user.is_admin_user %}All Courses{% else %}Courses{% endif %}</h2>
+        <p class="faculty-page-sub">Manage your course catalog and create exams for each course.</p>
+    </div>
+    <a href="{% url 'courses:create' %}" class="btn btn-primary btn-sm" data-portal-full>+ Create Course</a>
+</div>
+
+{% if messages %}
+<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% for c in courses %}
+<div class="portal-card faculty-list-card">
+    <div class="faculty-list-row">
+        <div>
+            <div class="faculty-list-title">{{ c.code }} — {{ c.title }}</div>
+            {% if user.is_admin_user and c.teacher %}
+            <div class="faculty-list-meta">{{ c.teacher.user.get_full_name|default:c.teacher.user.username }}</div>
+            {% endif %}
+        </div>
+        <a href="{% url 'exams:create' %}?course={{ c.pk }}" class="btn btn-primary btn-sm" data-portal-full>+ Create Exam</a>
+    </div>
+</div>
+{% empty %}
+<div class="portal-card"><p class="admin-empty">No courses yet.</p></div>
+{% endfor %}
+</div>

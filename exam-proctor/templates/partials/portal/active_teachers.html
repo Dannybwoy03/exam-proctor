@@ -1,0 +1,129 @@
+<div class="portal-page" data-portal-nav="active_teachers" data-portal-title="Active Teachers">
+{% if messages %}
+<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+{% endif %}
+
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">Active Teachers</h1>
+        <p class="admin-page-subtitle">Approved faculty accounts — revoke login access without deleting records</p>
+    </div>
+    {% include "includes/portal_tab_link.html" with href=dashboard_url label="← Dashboard" class="btn btn-outline btn-sm" only %}
+</div>
+
+<section class="portal-card">
+    <div class="admin-card-header">
+        <h2 class="portal-card-title portal-card-title--icon">{% include "includes/icon.html" with name="users" size="sm" only %} Approved Teacher Accounts</h2>
+        <span class="faculty-list-meta">{{ active_count }} active · {{ teacher_items|length }} total approved</span>
+    </div>
+    {% for item in teacher_items %}
+    {% with t=item.profile %}
+    <div class="admin-teacher-row admin-teacher-row-list">
+        {% if t.user.profile_photo %}
+        <img src="{{ t.user.profile_photo.url }}" alt="" class="admin-teacher-photo">
+        {% else %}
+        <div class="admin-teacher-avatar">{{ t.user.first_name|slice:":1"|default:t.user.username|slice:":1"|upper }}</div>
+        {% endif %}
+        <div class="admin-teacher-info">
+            <div class="admin-teacher-name">{{ t.user.get_full_name|default:t.user.username }}</div>
+            <div class="admin-teacher-meta">{{ t.user.email }}</div>
+            <div class="admin-teacher-meta">{{ t.department|default:"—" }} · Staff ID: {{ t.staff_id_number|default:"—" }}</div>
+            {% if t.approved_at %}
+            <div class="admin-teacher-date">Approved: {{ t.approved_at|date:"M d, Y" }}{% if t.approved_by %} · by {{ t.approved_by.get_full_name|default:t.approved_by.username }}{% endif %}</div>
+            {% endif %}
+        </div>
+        <div class="admin-teacher-actions">
+            {% include "includes/portal_tab_link.html" with href=item.review_url label="View Profile" class="btn btn-outline btn-sm" only %}
+            {% if t.user.is_active %}
+            <button type="button"
+                    class="btn btn-danger-outline btn-sm"
+                    data-revoke-pk="{{ t.user.pk }}"
+                    data-revoke-name="{{ t.user.get_full_name|default:t.user.username }}"
+                    data-revoke-role="Teacher"
+                    data-revoke-active="true">
+                Revoke Access
+            </button>
+            <span class="admin-status-badge active">Active</span>
+            {% else %}
+            <button type="button"
+                    class="btn btn-outline btn-sm"
+                    data-revoke-pk="{{ t.user.pk }}"
+                    data-revoke-name="{{ t.user.get_full_name|default:t.user.username }}"
+                    data-revoke-role="Teacher"
+                    data-revoke-active="false">
+                Reactivate
+            </button>
+            <span class="admin-status-badge pending">Access Revoked</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endwith %}
+    {% empty %}
+    <p class="admin-empty">No approved teacher accounts yet.</p>
+    {% endfor %}
+</section>
+
+<dialog id="revoke-confirm-dialog" class="portal-modal" aria-labelledby="revoke-confirm-title">
+    <form method="post" id="revoke-confirm-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ revoke_next }}">
+        <h2 id="revoke-confirm-title" class="portal-modal-title">Confirm action</h2>
+        <p id="revoke-confirm-message" class="portal-modal-message"></p>
+        <p id="revoke-confirm-detail" class="portal-modal-detail"></p>
+        <div class="portal-modal-actions">
+            <button type="button" class="btn btn-outline btn-sm" data-revoke-cancel>Cancel</button>
+            <button type="submit" id="revoke-confirm-submit" class="btn btn-danger-solid btn-sm">Revoke</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+(function () {
+    const dialog = document.getElementById("revoke-confirm-dialog");
+    const form = document.getElementById("revoke-confirm-form");
+    const title = document.getElementById("revoke-confirm-title");
+    const message = document.getElementById("revoke-confirm-message");
+    const detail = document.getElementById("revoke-confirm-detail");
+    const submitBtn = document.getElementById("revoke-confirm-submit");
+    if (!dialog || !form) return;
+
+    const revokeUrlTemplate = "{% url 'accounts:user_revoke' 0 %}";
+
+    document.querySelectorAll("[data-revoke-pk]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const pk = btn.dataset.revokePk;
+            const name = btn.dataset.revokeName;
+            const role = btn.dataset.revokeRole;
+            const isActive = btn.dataset.revokeActive === "true";
+            form.action = revokeUrlTemplate.replace(/\/0\//, "/" + pk + "/");
+            if (isActive) {
+                title.textContent = "Revoke teacher access?";
+                message.textContent = "This will deactivate " + name + " (" + role + "). They will no longer be able to log in.";
+                detail.textContent = "Their profile, courses, and exam content are preserved. You can reactivate this account later.";
+                submitBtn.textContent = "Revoke access";
+                submitBtn.className = "btn btn-danger-solid btn-sm";
+            } else {
+                title.textContent = "Reactivate teacher account?";
+                message.textContent = "This will restore login access for " + name + " (" + role + ").";
+                detail.textContent = "They will be able to log in immediately.";
+                submitBtn.textContent = "Reactivate";
+                submitBtn.className = "btn btn-primary btn-sm";
+            }
+            if (typeof dialog.showModal === "function") {
+                dialog.showModal();
+            } else if (confirm(message.textContent)) {
+                form.submit();
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-revoke-cancel]").forEach((btn) => {
+        btn.addEventListener("click", () => dialog.close());
+    });
+
+    dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) dialog.close();
+    });
+})();
+</script>
+</div>

@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Exam — {{ attempt.exam.title }}{% endblock %}
+
+{% block body %}
+<div id="exam-app"
+     class="exam-mode"
+     data-attempt-id="{{ attempt.pk }}"
+     {# computed_remaining_seconds is the authoritative clock (survives refreshes); the stored remaining_seconds field is only set once at start #}
+     data-duration="{{ attempt.computed_remaining_seconds }}"
+     data-strictness-level="{{ attempt.exam.strictness_level }}"
+     data-max-strikes="{{ proctoring_session.max_strikes|default:5 }}"
+     data-status-url="{% url 'proctoring:session_status' attempt.pk %}"
+     data-autosave-url="{% url 'exams:save' attempt.pk %}"
+     data-resume-url="{% url 'exams:reconnect' attempt.pk %}"
+     data-result-url="{% url 'exams:result' attempt.pk %}"
+     data-client-event-url="/api/v1/proctoring/client-event/"
+     data-id-verify-url="{% url 'proctoring:id_verify' %}"
+     data-dispute-url="{% url 'proctoring:dispute_violation' %}"
+     data-clip-url="{% url 'proctoring:violation_clip' %}"
+     data-acknowledge-url="{% url 'proctoring:acknowledge_violation' %}"
+     data-frame-interval="{{ proctor_config.frame_interval_ms }}"
+     data-clip-frame-count="{{ proctor_config.clip_frame_count }}"
+     data-clip-buffer-interval="{{ proctor_config.clip_buffer_interval_ms }}"
+     data-id-verification-status="{{ proctoring_session.id_verification_status|default:'pending' }}"
+     data-dashboard-url="{% url 'accounts:dashboard' %}"
+     data-pending-id="{% if attempt.status == 'pending_id' %}true{% else %}false{% endif %}">
+
+    <!-- Pre-exam overlay. Content adapts to the exam's strictness level so
+         the rules the student sees match what's actually enforced server-side. -->
+    <div id="exam-begin-overlay" class="exam-begin-overlay" role="dialog" aria-labelledby="exam-begin-title" aria-modal="true">
+        <div class="exam-begin-card">
+            <h1 id="exam-begin-title" class="exam-begin-title">{{ attempt.exam.title }}</h1>
+            <p class="exam-begin-subtitle">{{ attempt.exam.course.code }} · {{ total_questions }} question{{ total_questions|pluralize }} · {{ attempt.exam.effective_duration_minutes }} minutes</p>
+
+            <div class="exam-begin-rules">
+                {% if attempt.exam.strictness_level == 'none' %}
+                <h2 class="exam-begin-rules-title">Open-book mode</h2>
+                <ul class="exam-begin-rules-list">
+                    <li><strong>Lockdown is disabled for this exam.</strong></li>
+                    <li><strong>No webcam recording.</strong></li>
+                    <li><strong>Answers autosave.</strong></li>
+                </ul>
+                <p class="exam-begin-rules-note">When you submit, your answers are final.</p>
+                {% elif attempt.exam.strictness_level == 'level_1' %}
+                <h2 class="exam-begin-rules-title">Lockdown rules — {{ proctoring_session.max_strikes|default:5 }}-strike tolerance</h2>
+                <ul class="exam-begin-rules-list">
+                    <li><strong>Fullscreen is required.</strong></li>
+                    <li><strong>Stay on this tab.</strong></li>
+                    <li><strong>Keep this window focused.</strong></li>
+                    <li><strong>Webcam stays on.</strong></li>
+                </ul>
+                <p class="exam-begin-rules-note">The {{ proctoring_session.max_strikes|default:5 }}th violation ends the exam.</p>
+                {% else %}
+                <h2 class="exam-begin-rules-title">Lockdown rules — zero tolerance</h2>
+                <ul class="exam-begin-rules-list">
+                    <li><strong>Fullscreen is required.</strong></li>
+                    <li><strong>Stay on this tab.</strong></li>
+                    <li><strong>Keep this window focused.</strong></li>
+                    <li><strong>Webcam stays on.</strong></li>
+                </ul>
+                <p class="exam-begin-rules-note">No second chances — any violation ends the exam.</p>
+                {% endif %}
+            </div>
+
+            {% if attempt.exam.strictness_level != 'none' %}
+            <!-- Identity check: live camera preview + verification state. proctor.js
+                 drives data-state (starting/verifying/passed/failed/error) and the
+                 badge; lockdown.js updates the status line on pass/stall. -->
+            <div id="id-check-panel" class="id-check-panel"
+                 data-state="{% if proctoring_session.id_verification_status == 'passed' %}passed{% else %}starting{% endif %}">
+                <div class="id-check-frame">
+                    <video id="id-check-video" autoplay playsinline muted></video>
+                    <span id="id-check-badge" class="id-check-badge">
+                        {% if proctoring_session.id_verification_status == 'passed' %}IDENTITY CONFIRMED{% else %}STARTING CAMERA…{% endif %}
+                    </span>
+                </div>
+                <p id="exam-begin-id-status"
+                   class="exam-begin-id-status{% if proctoring_session.id_verification_status == 'passed' %} exam-begin-id-status--ready{% endif %}">
+                    {% if proctoring_session.id_verification_status == 'passed' %}
+                    Identity verified. You may begin when ready.
+                    {% else %}
+                    Your face is checked against the scan captured when you registered.
+                    {% endif %}
+                </p>
+                <div id="id-check-actions" class="id-check-actions" hidden>
+                    <button type="button" id="id-check-retry-btn" class="id-check-action-btn" hidden>
+                        Retry verification
+                    </button>
+                    <button type="button" id="id-check-back-btn" class="id-check-action-btn" hidden>
+                        Go back to dashboard
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+            <button type="button"
+                    id="exam-begin-btn"
+                    class="exam-begin-btn"
+                    {% if attempt.exam.strictness_level != 'none' and proctoring_session.id_verification_status != 'passed' %}disabled{% endif %}>
+                {% if attempt.exam.strictness_level == 'none' %}Begin exam{% else %}Enter fullscreen &amp; begin{% endif %}
+            </button>
+            <p id="exam-begin-error" class="exam-begin-error" hidden></p>
+        </div>
+    </div>
+
+    <div id="id-verify-toast" class="id-verify-toast" role="status" aria-live="polite" hidden>
+        <span class="id-verify-toast-icon" aria-hidden="true">{% include "includes/icon.html" with name="warning" size="sm" only %}</span>
+        <p class="id-verify-toast-message" id="id-verify-toast-message">
+            Identity verification failed. Return to the dashboard and try again later.
+        </p>
+    </div>
+
+    <!-- Strike warning dialog — shown at Level 1 strictness when a violation is
+         recorded but the attempt has not yet been terminated. Content is
+         populated by lockdown.js (violation type, strikes remaining). -->
+    <dialog id="strike-warning-dialog" class="strike-warning-dialog" aria-labelledby="strike-warning-title">
+        <form method="dialog" class="strike-warning-card">
+            <div class="strike-warning-header">
+                <span class="strike-warning-icon" aria-hidden="true">{% include "includes/icon.html" with name="warning" size="md" only %}</span>
+                <h2 id="strike-warning-title" class="strike-warning-title">Your exam session may be terminated</h2>
+            </div>
+            <p id="strike-warning-body" class="strike-warning-body">
+                The AI proctoring system has detected a potential integrity violation. Continuing with unauthorized behavior will result in immediate test lockout.
+            </p>
+            <div class="strike-warning-actions">
+                <button type="button" id="strike-warning-dispute" class="btn btn-outline btn-sm" value="dispute">File Dispute</button>
+                <button type="submit" id="strike-warning-continue" class="btn btn-primary btn-sm" value="continue" autofocus>Continue Exam</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Strike alert region. Full-screen dimmed overlay with a centred card,
+         one per offence, that the student must acknowledge. The exam and timer
+         keep running underneath while a card is open. Persistent in the DOM
+         (announced via aria-live) so it is read by assistive tech without
+         stealing focus on arrival. -->
+    <div id="strike-alert-region" class="strike-alert-region" role="alert" aria-live="polite" aria-atomic="false"></div>
+
+    <template id="strike-alert-template">
+        <div class="strike-alert" data-violation-id="">
+            <div class="strike-alert-icon" aria-hidden="true">{% include "includes/icon.html" with name="warning" size="md" only %}</div>
+            <div class="strike-alert-content">
+                <h2 class="strike-alert-title" hidden>Final warning</h2>
+                <p class="strike-alert-message"></p>
+                <p class="strike-alert-sub">Acknowledge to dismiss. Repeated violations end the exam.</p>
+                <div class="strike-alert-actions">
+                    <button type="button" class="btn btn-primary btn-sm strike-alert-ack">Acknowledge</button>
+                    <button type="button" class="btn btn-outline btn-sm strike-alert-dispute">File Dispute</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Post-end overlay. Shown when the exam terminates (zero-tolerance event,
+         timer expiry, or three-strike termination from the ML side). -->
+    <div id="exam-end-overlay" class="exam-end-overlay" role="dialog" aria-labelledby="exam-end-title" aria-modal="true" hidden>
+        <div class="exam-end-card">
+            <h1 id="exam-end-title" class="exam-end-title">Exam ended</h1>
+            <p id="exam-end-reason" class="exam-end-reason">Your attempt has been submitted.</p>
+            <p class="exam-end-note">Returning you to your results in a moment&hellip;</p>
+        </div>
+    </div>
+
+    <div id="exam-panel">
+        <div class="exam-lockdown-bar">
+            <div class="exam-lockdown-left">
+                <span class="exam-lockdown-logo">{% include "includes/icon.html" with name="shield" size="sm" only %}</span>
+                <div class="lockdown-badge">
+                    <span class="status-dot"></span>
+                    {% if attempt.exam.strictness_level == 'none' %}OPEN-BOOK MODE
+                    {% elif attempt.exam.strictness_level == 'level_1' %}LOCKDOWN · LEVEL 1 ({{ proctoring_session.max_strikes|default:5 }} STRIKES)
+                    {% else %}LOCKDOWN · LEVEL 2 (NO TOLERANCE){% endif %}
+                </div>
+            </div>
+            <div class="exam-lockdown-meta">
+                <span>IP SECURED: {{ request.META.REMOTE_ADDR|default:"127.0.0.1" }}</span>
+                <span>VERIFIED SESSION ID: {{ session_code }}</span>
+                <span>COURSE {{ attempt.exam.course.code }} — {{ attempt.exam.title|truncatewords:6 }}</span>
+                <span>QUESTIONS PROGRESS <span id="q-progress">1 / {{ total_questions }}</span></span>
+                <span class="timer-display timer-display-inner timer-urgent">{% include "includes/icon.html" with name="timer" size="sm" only %} TIME REMAINING <span id="timer">--:--:--</span></span>
+            </div>
+        </div>
+
+        <aside id="question-map" class="question-map" aria-label="Question navigator">
+            <div class="question-map-header">
+                <span class="question-map-title">Questions</span>
+                <span class="question-map-summary">
+                    <span id="qmap-answered-count">0</span>/<span id="qmap-total-count">{{ total_questions }}</span> answered
+                </span>
+            </div>
+            <div class="question-map-grid" role="list">
+                {% for eq in exam_questions %}
+                <button type="button"
+                        class="qmap-cell"
+                        data-target="{{ forloop.counter0 }}"
+                        data-question-id="{{ eq.question.id }}"
+                        role="listitem"
+                        aria-label="Question {{ forloop.counter }}"
+                        title="Question {{ forloop.counter }}">
+                    <span class="qmap-cell-number">{{ forloop.counter }}</span>
+                    <span class="qmap-cell-flag" aria-hidden="true">{% include "includes/icon.html" with name="flag" size="sm" only %}</span>
+                </button>
+                {% endfor %}
+            </div>
+            <ul class="question-map-legend" aria-hidden="true">
+                <li><span class="qmap-legend-swatch qmap-legend-swatch--current"></span> Current</li>
+                <li><span class="qmap-legend-swatch qmap-legend-swatch--answered"></span> Answered</li>
+                <li><span class="qmap-legend-swatch qmap-legend-swatch--flagged"></span> Flagged</li>
+            </ul>
+        </aside>
+
+        <div class="exam-question-page">
+            <form id="exam-form" method="post" action="{% url 'exams:submit' attempt.pk %}">
+                {% csrf_token %}
+                {% for eq in exam_questions %}
+                <div class="exam-question-card question-slide" data-index="{{ forloop.counter0 }}" {% if not forloop.first %}style="display:none"{% endif %}>
+                    <div class="exam-q-header">
+                        <span class="section-tag">
+                            {% if eq.question.question_type == 'mcq' %}SECTION A: MULTIPLE CHOICE
+                            {% elif eq.question.question_type == 'true_false' %}SECTION: TRUE / FALSE
+                            {% else %}SECTION: SHORT ANSWER{% endif %}
+                        </span>
+                        <span class="score-value">Score Value: {{ eq.marks_override|default:eq.question.marks }}.0 Pts</span>
+                    </div>
+                    <div class="exam-q-text">Q{{ forloop.counter }}. {{ eq.question.text }}</div>
+
+                    {% if eq.question.question_type == 'mcq' %}
+                        {% for opt in eq.question.options %}
+                        <label class="q-option" data-question="{{ eq.question.id }}">
+                            <input type="radio" name="q_{{ eq.question.id }}" value="{{ opt.key }}" style="display:none;">
+                            <span class="q-option-letter">{{ opt.key }}</span>
+                            <span>{{ opt.label }}</span>
+                            <span class="q-option-check">{% include "includes/icon.html" with name="check" size="sm" only %}</span>
+                        </label>
+                        {% endfor %}
+                    {% elif eq.question.question_type == 'true_false' %}
+                        <label class="q-option" data-question="{{ eq.question.id }}">
+                            <input type="radio" name="q_{{ eq.question.id }}" value="true" style="display:none;">
+                            <span class="q-option-letter">T</span><span>True</span><span class="q-option-check">{% include "includes/icon.html" with name="check" size="sm" only %}</span>
+                        </label>
+                        <label class="q-option" data-question="{{ eq.question.id }}">
+                            <input type="radio" name="q_{{ eq.question.id }}" value="false" style="display:none;">
+                            <span class="q-option-letter">F</span><span>False</span><span class="q-option-check">{% include "includes/icon.html" with name="check" size="sm" only %}</span>
+                        </label>
+                    {% else %}
+                        <textarea class="form-control" name="q_{{ eq.question.id }}" rows="5" placeholder="Type your answer…" style="width:100%;padding:0.875rem;border:1px solid var(--color-border);border-radius:var(--radius-md);font-family:inherit;"></textarea>
+                    {% endif %}
+
+                    <div class="exam-q-nav">
+                        <button type="button" class="btn-prev q-prev" {% if forloop.first %}disabled style="opacity:0.4"{% endif %}>← Previous Question</button>
+                        <button type="button" class="btn-flag btn-flag-inner" aria-pressed="false">
+                            {% include "includes/icon.html" with name="flag" size="sm" only %}
+                            <span class="btn-flag-label">Flag for Review</span>
+                        </button>
+                        {% if forloop.last %}
+                        <button type="submit" id="submit-btn" class="btn-next">Submit Exam →</button>
+                        {% else %}
+                        <button type="button" class="btn-next q-next">Next Question →</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="exam-question-card">
+                    <p>No questions in this exam.</p>
+                </div>
+                {% endfor %}
+            </form>
+        </div>
+
+        {% if attempt.exam.strictness_level != 'none' %}
+        <div class="proctor-float">
+            <div class="proctor-float-header">
+                <span><span class="status-dot" style="width:6px;height:6px;display:inline-block;"></span> PROCTOR FEED ACTIVE</span>
+            </div>
+            <div class="proctor-float-video">
+                <video id="webcam-exam" autoplay playsinline muted></video>
+                <span id="face-status-tag"
+                      class="face-verified-tag face-status-tag--{{ proctoring_session.id_verification_status|default:'pending' }}"
+                      data-status="{{ proctoring_session.id_verification_status|default:'pending' }}">
+                    {% if proctoring_session.id_verification_status == 'passed' %}FACE VERIFIED
+                    {% elif proctoring_session.id_verification_status == 'failed' %}VERIFICATION FAILED
+                    {% else %}VERIFYING…{% endif %}
+                </span>
+                <div class="mic-intensity">
+                    <span class="mic-label">MIC INTENSITY</span>
+                    <div class="mic-bars" id="mic-bars" aria-hidden="true">
+                        <span></span><span></span><span></span><span></span><span></span>
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="proctor-float-footer">
+                <span>Secure Mode</span>
+                <span class="violations-remaining"
+                      id="strikes"
+                      data-max-strikes="{{ proctoring_session.max_strikes|default:5 }}"
+                      data-current-strikes="{{ proctoring_session.strike_count|default:0 }}">
+                    Violations Remaining: {{ strikes_remaining }}/{{ proctoring_session.max_strikes|default:5 }}
+                </span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    const ATTEMPT_ID = {{ attempt.pk }};
+    const CSRF_TOKEN = "{{ csrf_token }}";
+    const TOTAL_QUESTIONS = {{ total_questions|default:1 }};
+</script>
+<script src="{% static 'js/strike_alerts.js' %}?v=3"></script>
+<script src="{% static 'js/proctor.js' %}?v=3"></script>
+<script src="{% static 'js/lockdown.js' %}?v=4"></script>
+<script src="{% static 'js/exam-nav.js' %}?v=3"></script>
+{% endblock %}

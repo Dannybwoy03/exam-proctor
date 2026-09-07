@@ -1,0 +1,94 @@
+{% load static %}
+{% with s=item.session %}
+{% with attempt=s.attempt violations=item.violations latest=item.latest_violation %}
+<div class="flagged-session-card-wrap">
+    <a href="{% url 'flagged_sessions' %}?session={{ s.pk }}"
+       data-audit-row
+       data-session-pk="{{ s.pk }}"
+       hx-get="{% url 'flagged_sessions' %}?session={{ s.pk }}"
+       hx-target="#audit-detail"
+       hx-select="#audit-detail"
+       hx-swap="outerHTML"
+       hx-push-url="true"
+       class="flagged-session-card {% if selected_session and selected_session.pk == s.pk %}active{% endif %}">
+        <div class="flagged-session-card__header">
+            <h2 class="flagged-session-card__title">{% firstof attempt.student.get_full_name attempt.student.username %}</h2>
+            <p class="flagged-session-card__desc">
+                {{ attempt.exam.course.code }} · {{ attempt.exam.title|truncatewords:6 }}
+                · {{ item.risk_score }}% integrity risk
+                {% if s.disputed_count %} · {{ s.disputed_count }} disputed{% endif %}
+            </p>
+        </div>
+
+        <div class="flagged-session-card__status">
+            <div class="flagged-session-card__status-main">
+                <span class="flagged-session-card__spinner" aria-hidden="true"></span>
+                <p class="flagged-session-card__status-text">
+                    {% if s.strike_count == 1 %}
+                    Proctoring violation flagged
+                    {% else %}
+                    {{ s.strike_count }} proctoring violations flagged
+                    {% endif %}
+                </p>
+            </div>
+            <time class="flagged-session-card__status-time">
+                {% if latest %}{{ latest.created_at|time:"H:i" }}{% else %}{{ attempt.started_at|time:"H:i" }}{% endif %}
+            </time>
+        </div>
+
+        <div class="flagged-session-card__footer">
+            <span class="risk-badge {{ item.risk_level }}">{{ item.risk_score }}% RISK</span>
+            {% if attempt.status == 'in_progress' %}
+            <span class="audit-status in-exam">In Exam</span>
+            {% else %}
+            <span class="audit-status reviewed">Reviewed</span>
+            {% endif %}
+        </div>
+    </a>
+
+    <div class="flagged-session-card__flyout" aria-hidden="true">
+        <div class="flagged-session-card__flyout-inner">
+            <p class="flagged-session-card__flyout-label">Session timeline</p>
+            <ul class="flagged-session-card__timeline">
+            <li class="flagged-session-card__event">
+                <span class="flagged-session-card__marker">
+                    <span class="flagged-session-card__marker-dot"></span>
+                    <span class="flagged-session-card__marker-icon">{% include "includes/icon.html" with name="check" size="sm" only %}</span>
+                </span>
+                <div class="flagged-session-card__event-body">
+                    <strong class="flagged-session-card__event-title">Exam session authorized</strong>
+                    <span class="flagged-session-card__event-time">Started {{ attempt.started_at|time:"H:i:s" }}</span>
+                </div>
+            </li>
+            {% for v in violations %}
+            <li class="flagged-session-card__event">
+                <span class="flagged-session-card__marker">
+                    <span class="flagged-session-card__marker-dot"></span>
+                    <span class="flagged-session-card__marker-icon">{% include "includes/icon.html" with name="warning" size="sm" only %}</span>
+                </span>
+                <div class="flagged-session-card__event-body">
+                    <strong class="flagged-session-card__event-title">
+                        Strike {{ v.strike_number }}: {{ v.get_violation_type_display }}
+                        {% if v.is_disputed %}<span class="disputed-badge">Disputed</span>{% endif %}
+                    </strong>
+                    <span class="flagged-session-card__event-time">Detected {{ v.created_at|time:"H:i:s" }}</span>
+                </div>
+            </li>
+            {% empty %}
+            <li class="flagged-session-card__event">
+                <span class="flagged-session-card__marker">
+                    <span class="flagged-session-card__marker-dot"></span>
+                    <span class="flagged-session-card__marker-icon">{% include "includes/icon.html" with name="warning" size="sm" only %}</span>
+                </span>
+                <div class="flagged-session-card__event-body">
+                    <strong class="flagged-session-card__event-title">Session flagged for review</strong>
+                    <span class="flagged-session-card__event-time">Awaiting violation log</span>
+                </div>
+            </li>
+            {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endwith %}
+{% endwith %}
