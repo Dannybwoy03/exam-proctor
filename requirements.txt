@@ -15,3 +15,5 @@ mediapipe>=0.10  # iris gaze detection (ml/gaze_service); needs face_landmarker.
 insightface>=0.7  # face identity verification (ml/face_id); buffalo_l pack auto-downloads on first use
 onnxruntime>=1.16  # CPU inference backend for insightface
 # psycopg2-binary>=2.9
+gunicorn>=20.1
+whitenoise>=6.5
